@@ -1,0 +1,6 @@
+BasedOnStyle: Google
+DerivePointerAlignment: false
+IncludeBlocks: Merge
+PackConstructorInitializers: Never
+PointerAlignment: Right
+QualifierAlignment: Right

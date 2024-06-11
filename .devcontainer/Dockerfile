@@ -1,7 +1,7 @@
 FROM ubuntu:jammy
 RUN apt update -y
 RUN apt upgrade -y
-RUN apt install -y sudo cmake cppcheck lcov curl llvm clang clangd clang-tidy clang-format wget git build-essential bash-completion
+RUN apt install -y sudo vim cmake cppcheck lcov curl llvm clang clangd clang-tidy clang-format wget git build-essential bash-completion
 ARG USERNAME=coder
 ARG USER_UID=1001
 ARG USER_GID=$USER_UID

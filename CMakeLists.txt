@@ -19,8 +19,13 @@ add_library(${PROJECT_NAME}-lib STATIC src/super_modbus.cpp)
 # )
 
 target_include_directories(${PROJECT_NAME}-lib
+    INTERFACE
+    include/
+)
+
+target_include_directories(${PROJECT_NAME}-lib
     PRIVATE
-    include
+    include/super_modbus/
 )
 
 ###################################
@@ -28,7 +33,8 @@ target_include_directories(${PROJECT_NAME}-lib
 ###################################
 add_executable(${PROJECT_NAME} main.cpp)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE
+target_link_libraries(${PROJECT_NAME}
+    PRIVATE
     ${PROJECT_NAME}-lib
 )
 

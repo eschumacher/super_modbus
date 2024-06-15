@@ -13,7 +13,11 @@ include(FetchContent)
 ###############################
 # super-modbus-lib
 ###############################
-add_library(${PROJECT_NAME}-lib STATIC src/super_modbus.cpp)
+add_library(${PROJECT_NAME}-lib
+    STATIC
+    src/super_modbus.cpp
+    src/rtu/rtu_slave.cpp
+)
 
 # target_link_libraries(${PROJECT_NAME}-lib PRIVATE
 # )

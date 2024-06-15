@@ -11,7 +11,8 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 add_executable(run_tests
-    gtest_test.cpp
+    test_gtest.cpp
+    rtu/test_rtu_slave.cpp
 )
 
 target_link_libraries(run_tests PRIVATE

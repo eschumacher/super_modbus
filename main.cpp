@@ -3,6 +3,6 @@
 
 int main() {
   std::cout << "Hello from main!\n";
-  super_modbus_hello();
+  supermb::hello_world();
   return 0;
 }

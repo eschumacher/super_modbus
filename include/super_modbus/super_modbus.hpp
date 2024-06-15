@@ -2,4 +2,8 @@
 
 #include <iostream>
 
-inline void super_modbus_hello() { std::cout << "Hello from super_modbus!\n"; }
+namespace supermb {
+
+inline void hello_world() { std::cout << "Hello from super_modbus!\n"; }
+
+}  // namespace supermb

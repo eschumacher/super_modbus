@@ -4,3 +4,4 @@ IncludeBlocks: Merge
 PackConstructorInitializers: Never
 PointerAlignment: Right
 QualifierAlignment: Right
+SortIncludes: false

@@ -16,12 +16,12 @@ TEST(RTUSlave, ReadHoldingRegisters) {
   static constexpr AddressSpan kAddressSpan{0, 10};
 
   RtuSlave rtu_slave{kSlaveId};
+  rtu_slave.AddHoldingRegisters(kAddressSpan);
 
   RtuRequest request{kSlaveId, FunctionCode::kReadHR, kAddressSpan};
   RtuResponse response = rtu_slave.Process(request);
 
   EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
 
-  EXPECT_EQ(response.GetData().size(),
-            static_cast<uint32_t>(kAddressSpan.reg_count_ * 2));
+  EXPECT_EQ(response.GetData().size(), static_cast<uint32_t>(kAddressSpan.reg_count * 2));
 }

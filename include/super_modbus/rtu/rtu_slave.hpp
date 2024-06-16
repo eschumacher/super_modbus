@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include "../common/address_map.hpp"
+#include "../common/address_span.hpp"
 #include "rtu_request.hpp"
 #include "rtu_response.hpp"
 
@@ -16,8 +18,11 @@ class RtuSlave {
 
   RtuResponse Process(RtuRequest const &request);
 
+  void AddHoldingRegisters(AddressSpan span);
+
  private:
   uint8_t id_{1};
+  AddressMap<int16_t> holding_registers_;
 };
 
 }  // namespace supermb

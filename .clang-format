@@ -1,4 +1,6 @@
 BasedOnStyle: Google
+AllowShortFunctionsOnASingleLine: InlineOnly
+ColumnLimit: 120
 DerivePointerAlignment: false
 IncludeBlocks: Merge
 PackConstructorInitializers: Never

@@ -25,3 +25,25 @@ TEST(RTUSlave, ReadHoldingRegisters) {
 
   EXPECT_EQ(response.GetData().size(), static_cast<uint32_t>(kAddressSpan.reg_count * 2));
 }
+
+TEST(RTUSlave, ReadInputRegisters) {
+  using supermb::AddressSpan;
+  using supermb::ExceptionCode;
+  using supermb::FunctionCode;
+  using supermb::RtuRequest;
+  using supermb::RtuResponse;
+  using supermb::RtuSlave;
+
+  static constexpr uint8_t kSlaveId{1};
+  static constexpr AddressSpan kAddressSpan{0, 10};
+
+  RtuSlave rtu_slave{kSlaveId};
+  rtu_slave.AddInputRegisters(kAddressSpan);
+
+  RtuRequest request{kSlaveId, FunctionCode::kReadIR, kAddressSpan};
+  RtuResponse response = rtu_slave.Process(request);
+
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+
+  EXPECT_EQ(response.GetData().size(), static_cast<uint32_t>(kAddressSpan.reg_count * 2));
+}

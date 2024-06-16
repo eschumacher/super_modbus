@@ -15,19 +15,14 @@ class RtuResponse {
 
   [[nodiscard]] uint8_t GetSlaveId() const noexcept { return slave_id_; }
 
-  [[nodiscard]] FunctionCode GetFunctionCode() const noexcept {
-    return function_code_;
-  }
-  [[nodiscard]] ExceptionCode GetExceptionCode() const noexcept {
-    return exception_code_;
-  }
+  [[nodiscard]] FunctionCode GetFunctionCode() const noexcept { return function_code_; }
+  [[nodiscard]] ExceptionCode GetExceptionCode() const noexcept { return exception_code_; }
   [[nodiscard]] std::vector<uint8_t> GetData() const { return data_; }
 
-  void SetExceptionCode(ExceptionCode const &exception_code) noexcept {
-    exception_code_ = exception_code;
-  }
+  void SetExceptionCode(ExceptionCode const &exception_code) noexcept { exception_code_ = exception_code; }
 
   void SetData(std::vector<uint8_t> const &data) { data_ = data; };
+  void EmplaceBack(uint8_t data) { data_.emplace_back(data); }
 
  private:
   const uint8_t slave_id_{};

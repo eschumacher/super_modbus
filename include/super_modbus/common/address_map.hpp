@@ -24,9 +24,10 @@ class AddressMap {
     }
   }
 
-  std::optional<DataType> operator[](int address) {
-    if (data_.contains(address)) {
-      return data_[address];
+  [[nodiscard]] std::optional<DataType> operator[](int address) const {
+    auto const value_iter = data_.find(address);
+    if (value_iter != data_.end()) {
+      return value_iter->second;
     }
 
     return {};

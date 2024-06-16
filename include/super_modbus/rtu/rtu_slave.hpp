@@ -19,10 +19,15 @@ class RtuSlave {
   RtuResponse Process(RtuRequest const &request);
 
   void AddHoldingRegisters(AddressSpan span);
+  void AddInputRegisters(AddressSpan span);
 
  private:
+  static void ProcessReadRegisters(AddressMap<int16_t> const &address_map, RtuRequest const &request,
+                                   RtuResponse &response);
+
   uint8_t id_{1};
-  AddressMap<int16_t> holding_registers_;
+  AddressMap<int16_t> holding_registers_{};
+  AddressMap<int16_t> input_registers_{};
 };
 
 }  // namespace supermb

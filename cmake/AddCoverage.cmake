@@ -3,8 +3,6 @@ function(AddCoverage target)
     find_program(GENHTML_PATH genhtml REQUIRED)
     add_custom_target(coverage-${target}
         COMMENT "Running coverage for ${target}..."
-        COMMAND find ${CMAKE_BINARY_DIR} -type f -name '*.gcda' -delete
-        COMMAND find ${CMAKE_BINARY_DIR} -type f -name '*.gcno' -delete
         COMMAND ${LCOV_PATH} --gcov-tool ${CMAKE_SOURCE_DIR}/cmake/gcov-llvm-wrapper.sh -d . --zerocounters
         COMMAND $<TARGET_FILE:${target}>
         COMMAND ${LCOV_PATH} --gcov-tool ${CMAKE_SOURCE_DIR}/cmake/gcov-llvm-wrapper.sh -d . --capture -o coverage.info

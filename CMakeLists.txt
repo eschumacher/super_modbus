@@ -16,6 +16,7 @@ include(FetchContent)
 add_library(${PROJECT_NAME}-lib
     STATIC
     src/super_modbus.cpp
+    src/rtu/rtu_request.cpp
     src/rtu/rtu_slave.cpp
 )
 

@@ -13,6 +13,9 @@
 
 namespace supermb {
 
+// Default timeout for frame processing (1 second)
+static constexpr uint32_t kDefaultFrameTimeoutMs = 1000;
+
 class RtuSlave {
  public:
   explicit RtuSlave(uint8_t slave_id)
@@ -34,7 +37,7 @@ class RtuSlave {
    * @param timeout_ms Timeout in milliseconds (0 = no timeout)
    * @return true if a frame was processed, false if no frame or error
    */
-  bool ProcessIncomingFrame(ByteTransport &transport, uint32_t timeout_ms = 1000);
+  bool ProcessIncomingFrame(ByteTransport &transport, uint32_t timeout_ms = kDefaultFrameTimeoutMs);
 
   /**
    * @brief Poll transport for incoming frames and process them
@@ -65,37 +68,35 @@ class RtuSlave {
    * @return Frame bytes if successful, empty optional on error/timeout
    */
   [[nodiscard]] static std::optional<std::vector<uint8_t>> ReadFrame(ByteReader &transport,
-                                                                       uint32_t timeout_ms = 1000);
+                                                                     uint32_t timeout_ms = kDefaultFrameTimeoutMs);
 
   static void ProcessReadRegisters(AddressMap<int16_t> const &address_map, RtuRequest const &request,
                                    RtuResponse &response);
   static void ProcessWriteSingleRegister(AddressMap<int16_t> &address_map, RtuRequest const &request,
                                          RtuResponse &response);
-  static void ProcessReadCoils(AddressMap<bool> const &address_map, RtuRequest const &request,
-                               RtuResponse &response);
-  static void ProcessWriteSingleCoil(AddressMap<bool> &address_map, RtuRequest const &request,
-                                      RtuResponse &response);
+  static void ProcessReadCoils(AddressMap<bool> const &address_map, RtuRequest const &request, RtuResponse &response);
+  static void ProcessWriteSingleCoil(AddressMap<bool> &address_map, RtuRequest const &request, RtuResponse &response);
   static void ProcessWriteMultipleRegisters(AddressMap<int16_t> &address_map, RtuRequest const &request,
-                                             RtuResponse &response);
+                                            RtuResponse &response);
   static void ProcessWriteMultipleCoils(AddressMap<bool> &address_map, RtuRequest const &request,
                                         RtuResponse &response);
-  void ProcessReadExceptionStatus(RtuRequest const &request, RtuResponse &response);
-  void ProcessDiagnostics(RtuRequest const &request, RtuResponse &response);
-  void ProcessGetComEventCounter(RtuRequest const &request, RtuResponse &response);
-  void ProcessGetComEventLog(RtuRequest const &request, RtuResponse &response);
-  void ProcessReportSlaveID(RtuRequest const &request, RtuResponse &response);
-  void ProcessReadFileRecord(RtuRequest const &request, RtuResponse &response);
+  void ProcessReadExceptionStatus(RtuRequest const &request, RtuResponse &response) const;
+  static void ProcessDiagnostics(RtuRequest const &request, RtuResponse &response);
+  void ProcessGetComEventCounter(RtuRequest const &request, RtuResponse &response) const;
+  void ProcessGetComEventLog(RtuRequest const &request, RtuResponse &response) const;
+  void ProcessReportSlaveID(RtuRequest const &request, RtuResponse &response) const;
+  void ProcessReadFileRecord(RtuRequest const &request, RtuResponse &response) const;
   void ProcessWriteFileRecord(RtuRequest const &request, RtuResponse &response);
-  void ProcessMaskWriteRegister(AddressMap<int16_t> &address_map, RtuRequest const &request,
-                                 RtuResponse &response);
-  void ProcessReadWriteMultipleRegisters(AddressMap<int16_t> &address_map, RtuRequest const &request,
-                                         RtuResponse &response);
-  void ProcessReadFIFOQueue(RtuRequest const &request, RtuResponse &response);
+  static void ProcessMaskWriteRegister(AddressMap<int16_t> &address_map, RtuRequest const &request,
+                                       RtuResponse &response);
+  static void ProcessReadWriteMultipleRegisters(AddressMap<int16_t> &address_map, RtuRequest const &request,
+                                                RtuResponse &response);
+  void ProcessReadFIFOQueue(RtuRequest const &request, RtuResponse &response) const;
 
   // File Record storage: file_number -> (record_number -> record_data)
   // Each record is a vector of 16-bit values (registers)
   using FileRecord = std::vector<int16_t>;
-  using FileRecords = std::unordered_map<uint16_t, FileRecord>;  // record_number -> record_data
+  using FileRecords = std::unordered_map<uint16_t, FileRecord>;   // record_number -> record_data
   using FileStorage = std::unordered_map<uint16_t, FileRecords>;  // file_number -> records
 
   // FIFO Queue storage: fifo_address -> queue of register values
@@ -110,15 +111,15 @@ class RtuSlave {
   using ComEventLog = std::vector<ComEventLogEntry>;
 
   uint8_t id_{1};
-  uint8_t exception_status_{0};  // For FC 7
+  uint8_t exception_status_{0};    // For FC 7
   uint16_t com_event_counter_{0};  // For FC 11
-  uint16_t message_count_{0};  // For FC 12
+  uint16_t message_count_{0};      // For FC 12
   AddressMap<int16_t> holding_registers_{};
   AddressMap<int16_t> input_registers_{};
   AddressMap<bool> coils_{};
   AddressMap<bool> discrete_inputs_{};
-  FileStorage file_storage_{};  // File record storage
-  FIFOStorage fifo_storage_{};  // FIFO queue storage
+  FileStorage file_storage_{};   // File record storage
+  FIFOStorage fifo_storage_{};   // FIFO queue storage
   ComEventLog com_event_log_{};  // Communication event log
 };
 

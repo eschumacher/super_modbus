@@ -2,6 +2,7 @@
 #include <array>
 #include <cassert>
 #include <iostream>
+#include <ranges>
 #include <span>
 #include <tuple>
 #include <vector>
@@ -21,11 +22,18 @@ static constexpr std::array<FunctionCode, 10> kAddressSpanValidFunctions{
 static constexpr uint8_t kAddressSpanStartAddressIndex{0};
 static constexpr uint8_t kAddressSpanRegCountIndex{2};
 static constexpr uint8_t kAddressSpanMinDataSize{4};
+static constexpr uint8_t kMaxFileRecords{255};
+
+// Helper function to check if function code is in valid functions array
+static constexpr bool IsAddressSpanValidFunction(FunctionCode function_code) {
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay,hicpp-no-array-decay)
+  // std::ranges::any_of correctly handles std::array without decay
+  return std::ranges::any_of(kAddressSpanValidFunctions,
+                             [function_code](FunctionCode valid_code) { return valid_code == function_code; });
+}
 
 std::optional<AddressSpan> RtuRequest::GetAddressSpan() const {
-  if ((data_.size() < kAddressSpanMinDataSize) ||
-      (std::find(kAddressSpanValidFunctions.begin(), kAddressSpanValidFunctions.end(), header_.function_code) ==
-       kAddressSpanValidFunctions.end())) {
+  if ((data_.size() < kAddressSpanMinDataSize) || !IsAddressSpanValidFunction(header_.function_code)) {
     return {};
   }
 
@@ -38,8 +46,8 @@ std::optional<AddressSpan> RtuRequest::GetAddressSpan() const {
 }
 
 bool RtuRequest::SetAddressSpan(AddressSpan address_span) {
-  if (std::find(kAddressSpanValidFunctions.begin(), kAddressSpanValidFunctions.end(), header_.function_code) ==
-      kAddressSpanValidFunctions.end()) {
+  if (!IsAddressSpanValidFunction(header_.function_code)) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);  // likely a library defect if hit - create ticket in github
     return false;
   }
@@ -54,6 +62,7 @@ bool RtuRequest::SetAddressSpan(AddressSpan address_span) {
 
 bool RtuRequest::SetWriteSingleRegisterData(uint16_t register_address, int16_t register_value) {
   if (header_.function_code != FunctionCode::kWriteSingleReg) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);  // likely a library defect if hit - create ticket in github
     return false;
   }
@@ -68,6 +77,7 @@ bool RtuRequest::SetWriteSingleRegisterData(uint16_t register_address, int16_t r
 
 bool RtuRequest::SetWriteSingleCoilData(uint16_t coil_address, bool coil_value) {
   if (header_.function_code != FunctionCode::kWriteSingleCoil) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);  // likely a library defect if hit - create ticket in github
     return false;
   }
@@ -76,7 +86,7 @@ bool RtuRequest::SetWriteSingleCoilData(uint16_t coil_address, bool coil_value) 
   data_.emplace_back(GetHighByte(coil_address));
   data_.emplace_back(GetLowByte(coil_address));
   // Modbus spec: 0x0000 = OFF, 0xFF00 = ON
-  uint16_t value = coil_value ? 0xFF00 : 0x0000;
+  uint16_t value = coil_value ? kCoilOnValue : 0x0000;
   data_.emplace_back(GetHighByte(value));
   data_.emplace_back(GetLowByte(value));
   return true;
@@ -85,6 +95,7 @@ bool RtuRequest::SetWriteSingleCoilData(uint16_t coil_address, bool coil_value) 
 bool RtuRequest::SetWriteMultipleRegistersData(uint16_t start_address, uint16_t count,
                                                std::span<int16_t const> values) {
   if (header_.function_code != FunctionCode::kWriteMultRegs) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);  // likely a library defect if hit - create ticket in github
     return false;
   }
@@ -112,6 +123,7 @@ bool RtuRequest::SetWriteMultipleRegistersData(uint16_t start_address, uint16_t 
 
 bool RtuRequest::SetWriteMultipleCoilsData(uint16_t start_address, uint16_t count, std::span<bool const> values) {
   if (header_.function_code != FunctionCode::kWriteMultCoils) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);  // likely a library defect if hit - create ticket in github
     return false;
   }
@@ -128,7 +140,7 @@ bool RtuRequest::SetWriteMultipleCoilsData(uint16_t start_address, uint16_t coun
   data_.emplace_back(GetHighByte(count));
   data_.emplace_back(GetLowByte(count));
   // Byte count (8 coils per byte, rounded up)
-  uint8_t byte_count = static_cast<uint8_t>((count + 7) / 8);
+  auto byte_count = static_cast<uint8_t>((count + supermb::kCoilByteCountRoundingOffset) / supermb::kCoilsPerByte);
   data_.emplace_back(byte_count);
   // Pack coils into bytes
   uint8_t current_byte = 0;
@@ -138,7 +150,7 @@ bool RtuRequest::SetWriteMultipleCoilsData(uint16_t start_address, uint16_t coun
       current_byte |= (1 << bit_position);
     }
     ++bit_position;
-    if (bit_position == 8 || i == count - 1) {
+    if (bit_position == supermb::kCoilsPerByte || i == static_cast<size_t>(count - 1)) {
       data_.emplace_back(current_byte);
       current_byte = 0;
       bit_position = 0;
@@ -149,6 +161,7 @@ bool RtuRequest::SetWriteMultipleCoilsData(uint16_t start_address, uint16_t coun
 
 bool RtuRequest::SetDiagnosticsData(uint16_t sub_function_code, std::span<uint8_t const> data) {
   if (header_.function_code != FunctionCode::kDiagnostics) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);
     return false;
   }
@@ -162,6 +175,7 @@ bool RtuRequest::SetDiagnosticsData(uint16_t sub_function_code, std::span<uint8_
 
 bool RtuRequest::SetMaskWriteRegisterData(uint16_t address, uint16_t and_mask, uint16_t or_mask) {
   if (header_.function_code != FunctionCode::kMaskWriteReg) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);
     return false;
   }
@@ -179,6 +193,7 @@ bool RtuRequest::SetMaskWriteRegisterData(uint16_t address, uint16_t and_mask, u
 bool RtuRequest::SetReadWriteMultipleRegistersData(uint16_t read_start, uint16_t read_count, uint16_t write_start,
                                                    uint16_t write_count, std::span<int16_t const> write_values) {
   if (header_.function_code != FunctionCode::kReadWriteMultRegs) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);
     return false;
   }
@@ -210,6 +225,7 @@ bool RtuRequest::SetReadWriteMultipleRegistersData(uint16_t read_start, uint16_t
 
 bool RtuRequest::SetReadFIFOQueueData(uint16_t fifo_address) {
   if (header_.function_code != FunctionCode::kReadFIFOQueue) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);
     return false;
   }
@@ -222,17 +238,18 @@ bool RtuRequest::SetReadFIFOQueueData(uint16_t fifo_address) {
 
 bool RtuRequest::SetReadFileRecordData(std::span<std::tuple<uint16_t, uint16_t, uint16_t> const> file_records) {
   if (header_.function_code != FunctionCode::kReadFileRecord) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);
     return false;
   }
 
-  if (file_records.empty() || file_records.size() > 255) {
+  if (file_records.empty() || file_records.size() > kMaxFileRecords) {
     return false;
   }
 
   data_.clear();
   // Calculate byte count: 6 bytes per record (file_number(2) + record_number(2) + record_length(2))
-  uint8_t byte_count = static_cast<uint8_t>(file_records.size() * 6);
+  auto byte_count = static_cast<uint8_t>(file_records.size() * supermb::kFileRecordBytesPerRecord);
   data_.emplace_back(byte_count);
 
   // Encode each record: file_number (high, low) + record_number (high, low) + record_length (high, low)
@@ -253,11 +270,12 @@ bool RtuRequest::SetReadFileRecordData(std::span<std::tuple<uint16_t, uint16_t, 
 bool RtuRequest::SetWriteFileRecordData(
     std::span<std::tuple<uint16_t, uint16_t, std::vector<int16_t>> const> file_records) {
   if (header_.function_code != FunctionCode::kWriteFileRecord) {
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);
     return false;
   }
 
-  if (file_records.empty() || file_records.size() > 255) {
+  if (file_records.empty() || file_records.size() > kMaxFileRecords) {
     return false;
   }
 
@@ -267,7 +285,7 @@ bool RtuRequest::SetWriteFileRecordData(
   std::vector<uint8_t> temp_data;
   for (auto const &[file_number, record_number, record_data] : file_records) {
     // Reference type (0x06 for file record)
-    temp_data.emplace_back(0x06);
+    temp_data.emplace_back(supermb::kFileRecordReferenceType);
     // File number (high byte, low byte)
     temp_data.emplace_back(GetHighByte(file_number));
     temp_data.emplace_back(GetLowByte(file_number));

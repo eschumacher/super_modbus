@@ -421,8 +421,10 @@ TEST(MasterIntegration, MaskWriteRegister) {
   slave.Process(init_req);
 
   // Mask write: AND with 0xFF00, OR with 0x0056 - simulate round-trip
+  static constexpr uint16_t kMaskWriteAndValue = 0xFF00;
+  static constexpr uint16_t kMaskWriteOrValue = 0x0056;
   RtuRequest mask_req{{kSlaveId, FunctionCode::kMaskWriteReg}};
-  mask_req.SetMaskWriteRegisterData(0, 0xFF00, 0x0056);
+  mask_req.SetMaskWriteRegisterData(0, kMaskWriteAndValue, kMaskWriteOrValue);
   sim.SendRequestOnly(mask_req);
   sim.ProcessMasterRequest();
 
@@ -683,18 +685,18 @@ TEST(MasterIntegration, ReadFileRecord) {
   RtuSlave &slave = sim.GetSlave();
   RtuRequest write_req{{kSlaveId, FunctionCode::kWriteFileRecord}};
   std::vector<uint8_t> write_data;
-  write_data.push_back(0x00);  // Byte count
-  write_data.push_back(0x06);  // Reference type
-  write_data.push_back(0x00);  // File number high
-  write_data.push_back(0x01);  // File number low (file 1)
-  write_data.push_back(0x00);  // Record number high
-  write_data.push_back(0x00);  // Record number low (record 0)
-  write_data.push_back(0x00);  // Record length high
-  write_data.push_back(0x02);  // Record length low (2 registers)
-  write_data.push_back(0x12);  // Register 0 low
-  write_data.push_back(0x34);  // Register 0 high
-  write_data.push_back(0x56);  // Register 1 low
-  write_data.push_back(0x78);  // Register 1 high
+  write_data.push_back(0x00);                               // Byte count
+  write_data.push_back(supermb::kFileRecordReferenceType);  // Reference type
+  write_data.push_back(0x00);                               // File number high
+  write_data.push_back(0x01);                               // File number low (file 1)
+  write_data.push_back(0x00);                               // Record number high
+  write_data.push_back(0x00);                               // Record number low (record 0)
+  write_data.push_back(0x00);                               // Record length high
+  write_data.push_back(0x02);                               // Record length low (2 registers)
+  write_data.push_back(0x12);                               // Register 0 low
+  write_data.push_back(0x34);                               // Register 0 high
+  write_data.push_back(0x56);                               // Register 1 low
+  write_data.push_back(0x78);                               // Register 1 high
   write_data[0] = static_cast<uint8_t>(write_data.size() - 1);
   write_req.SetRawData(write_data);
   slave.Process(write_req);
@@ -704,7 +706,7 @@ TEST(MasterIntegration, ReadFileRecord) {
   // the request. We need to manually handle the communication for the simulator.
   RtuRequest read_req{{kSlaveId, FunctionCode::kReadFileRecord}};
   std::vector<std::tuple<uint16_t, uint16_t, uint16_t>> file_records;
-  file_records.push_back({1, 0, 2});  // File 1, Record 0, Length 2
+  file_records.emplace_back(1, 0, 2);  // File 1, Record 0, Length 2
   read_req.SetReadFileRecordData(file_records);
 
   sim.SendRequestOnly(read_req);
@@ -723,14 +725,20 @@ TEST(MasterIntegration, ReadFileRecord) {
   size_t offset = 1;
   size_t end_offset = 1 + response_length;
 
+  static constexpr size_t kFileRecordMinSize = 8;
   while (offset < end_offset) {
-    if (offset + 8 > end_offset) break;
+    if (offset + kFileRecordMinSize > end_offset) {
+      break;
+    }
     uint8_t reference_type = data[offset];
-    if (reference_type != 0x06) break;
+    if (reference_type != supermb::kFileRecordReferenceType) {
+      break;
+    }
     uint8_t data_length = data[offset + 1];
+    static constexpr size_t kFileRecordHeaderSize = 6;
     uint16_t file_number = MakeInt16(data[offset + 3], data[offset + 2]);
     uint16_t record_number = MakeInt16(data[offset + 5], data[offset + 4]);
-    offset += 6;
+    offset += kFileRecordHeaderSize;
     uint16_t record_data_length = (data_length - 4) / 2;
     std::vector<int16_t> record_data;
     record_data.reserve(record_data_length);
@@ -743,12 +751,13 @@ TEST(MasterIntegration, ReadFileRecord) {
   }
 
   ASSERT_EQ(result.size(), 1);
-  auto it = result.find({1, 0});
-  ASSERT_NE(it, result.end());
-  EXPECT_EQ(it->second.size(), 2);
+  auto record_it = result.find({1, 0});
+  ASSERT_NE(record_it, result.end());
+  EXPECT_EQ(record_it->second.size(), 2);
+
   // Verify values (accounting for byte order in response)
-  EXPECT_EQ(it->second[0], 0x3412);
-  EXPECT_EQ(it->second[1], 0x7856);
+  EXPECT_EQ(record_it->second[0], 0x3412);
+  EXPECT_EQ(record_it->second[1], 0x7856);
 }
 
 TEST(MasterIntegration, WriteFileRecord) {
@@ -757,9 +766,12 @@ TEST(MasterIntegration, WriteFileRecord) {
   MasterSlaveSimulator sim{kSlaveId};
 
   // Master writes file record
+  static constexpr uint16_t kTestFileRecordValue1 = 0xABCD;
+  static constexpr uint16_t kTestFileRecordValue2 = 0xEF01;
   std::vector<std::tuple<uint16_t, uint16_t, std::vector<int16_t>>> file_records;
-  std::vector<int16_t> record_data{static_cast<int16_t>(0xABCD), static_cast<int16_t>(0xEF01)};
-  file_records.push_back({1, 0, record_data});
+  std::vector<int16_t> record_data{static_cast<int16_t>(kTestFileRecordValue1),
+                                   static_cast<int16_t>(kTestFileRecordValue2)};
+  file_records.emplace_back(1, 0, record_data);
 
   bool result = sim.GetMaster().WriteFileRecord(kSlaveId, file_records);
   EXPECT_TRUE(result);
@@ -768,13 +780,13 @@ TEST(MasterIntegration, WriteFileRecord) {
   RtuSlave &slave = sim.GetSlave();
   RtuRequest read_req{{kSlaveId, FunctionCode::kReadFileRecord}};
   std::vector<uint8_t> read_data;
-  read_data.push_back(0x06);  // Byte count
-  read_data.push_back(0x00);  // File number high
-  read_data.push_back(0x01);  // File number low
-  read_data.push_back(0x00);  // Record number high
-  read_data.push_back(0x00);  // Record number low
-  read_data.push_back(0x00);  // Record length high
-  read_data.push_back(0x02);  // Record length low
+  read_data.push_back(supermb::kFileRecordReferenceType);  // Reference type
+  read_data.push_back(0x00);                               // File number high
+  read_data.push_back(0x01);                               // File number low
+  read_data.push_back(0x00);                               // Record number high
+  read_data.push_back(0x00);                               // Record number low
+  read_data.push_back(0x00);                               // Record length high
+  read_data.push_back(0x02);                               // Record length low
   read_req.SetRawData(read_data);
   RtuResponse read_resp = slave.Process(read_req);
 
@@ -785,17 +797,19 @@ TEST(MasterIntegration, WriteFileRecord) {
 
 TEST(MasterIntegration, CoilPacking) {
   static constexpr uint8_t kSlaveId{23};
+  static constexpr size_t kTestCoilCount = 16;
+  static constexpr size_t kCoilsPerByte = 8;
 
   MasterSlaveSimulator sim{kSlaveId};
-  sim.SetupCoils({0, 16});
+  sim.SetupCoils({0, kTestCoilCount});
 
   // Write 16 coils (exactly 2 bytes) - simulate round-trip
   RtuRequest write_req{{kSlaveId, FunctionCode::kWriteMultCoils}};
-  std::array<bool, 16> coil_values;
-  for (size_t i = 0; i < 16; ++i) {
-    coil_values[i] = (i % 2 == 0);
+  std::array<bool, kTestCoilCount> coil_values{};
+  for (size_t i = 0; i < kTestCoilCount; ++i) {
+    coil_values.at(i) = (i % 2 == 0);
   }
-  write_req.SetWriteMultipleCoilsData(0, 16, coil_values);
+  write_req.SetWriteMultipleCoilsData(0, kTestCoilCount, coil_values);
   sim.SendRequestOnly(write_req);
   sim.ProcessMasterRequest();
   auto write_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
@@ -804,7 +818,7 @@ TEST(MasterIntegration, CoilPacking) {
 
   // Read them back
   RtuRequest read_req{{kSlaveId, FunctionCode::kReadCoils}};
-  read_req.SetAddressSpan({0, 16});
+  read_req.SetAddressSpan({0, kTestCoilCount});
   sim.SendRequestOnly(read_req);
   sim.ProcessMasterRequest();
   auto read_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);

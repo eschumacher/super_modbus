@@ -88,7 +88,7 @@ std::optional<RtuRequest> RtuFrame::DecodeRequest(std::span<uint8_t const> frame
   std::vector<uint8_t> data;
   if (frame.size() > kMinFrameSize) {
     size_t data_size = frame.size() - kMinFrameSize;
-    data.assign(frame.begin() + 2, frame.begin() + 2 + data_size);
+    data.assign(frame.begin() + 2, frame.begin() + 2 + static_cast<ssize_t>(data_size));
   }
 
   RtuRequest request({slave_id, function_code});
@@ -116,16 +116,14 @@ std::optional<RtuRequest> RtuFrame::DecodeRequest(std::span<uint8_t const> frame
       if (data.size() >= 4) {
         uint16_t address = MakeInt16(data[1], data[0]);
         uint16_t value = MakeInt16(data[3], data[2]);
-        bool coil_value = (value == 0xFF00);
+        bool coil_value = (value == kCoilOnValue);
         request.SetWriteSingleCoilData(address, coil_value);
       } else {
         request.SetRawData(data);
       }
-    } else if (function_code == FunctionCode::kWriteMultRegs || function_code == FunctionCode::kWriteMultCoils) {
-      // For write multiple operations, store raw data - they'll be parsed by the processing functions
-      request.SetRawData(data);
     } else {
-      // For other function codes, just store raw data
+      // For write multiple operations and other function codes, store raw data
+      // Write multiple operations will be parsed by the processing functions
       request.SetRawData(data);
     }
   }
@@ -150,21 +148,21 @@ std::optional<RtuResponse> RtuFrame::DecodeResponse(std::span<uint8_t const> fra
 
   // Check if this is an exception response (MSB set)
   bool is_exception = (function_code_byte & kExceptionFunctionCodeMask) != 0;
-  FunctionCode function_code = static_cast<FunctionCode>(function_code_byte & kFunctionCodeMask);
+  auto function_code = static_cast<FunctionCode>(function_code_byte & kFunctionCodeMask);
 
   RtuResponse response(slave_id, function_code);
 
   if (is_exception) {
     // Exception response: next byte is exception code
     if (frame.size() >= 3) {
-      ExceptionCode exception_code = static_cast<ExceptionCode>(frame[2]);
+      auto exception_code = static_cast<ExceptionCode>(frame[2]);
       response.SetExceptionCode(exception_code);
     }
   } else {
     // Normal response: extract data
     if (frame.size() > kMinFrameSize) {
       size_t data_size = frame.size() - kMinFrameSize;
-      std::vector<uint8_t> data(frame.begin() + 2, frame.begin() + 2 + data_size);
+      std::vector<uint8_t> data(frame.begin() + 2, frame.begin() + 2 + static_cast<ssize_t>(data_size));
       response.SetData(data);
       response.SetExceptionCode(ExceptionCode::kAcknowledge);
     } else {
@@ -183,10 +181,9 @@ size_t RtuFrame::GetMinFrameSize(FunctionCode function_code) {
     case FunctionCode::kReadIR:
     case FunctionCode::kReadCoils:
     case FunctionCode::kReadDI:
-      return kMinFrameSize + 4;  // + address (2) + count (2)
     case FunctionCode::kWriteSingleReg:
     case FunctionCode::kWriteSingleCoil:
-      return kMinFrameSize + 4;  // + address (2) + value (2)
+      return kMinFrameSize + 4;  // + address (2) + count/value (2)
     default:
       return kMinFrameSize;
   }
@@ -197,7 +194,7 @@ bool RtuFrame::IsRequestFrameComplete(std::span<uint8_t const> frame) {
     return false;  // Need at least slave_id and function_code
   }
 
-  FunctionCode function_code = static_cast<FunctionCode>(frame[1] & kFunctionCodeMask);
+  auto function_code = static_cast<FunctionCode>(frame[1] & kFunctionCodeMask);
   size_t min_size = GetMinFrameSize(function_code);
   return frame.size() >= min_size;
 }
@@ -209,11 +206,11 @@ bool RtuFrame::IsResponseFrameComplete(std::span<uint8_t const> frame) {
 
   uint8_t function_code_byte = frame[1];
   bool is_exception = (function_code_byte & kExceptionFunctionCodeMask) != 0;
-  FunctionCode function_code = static_cast<FunctionCode>(function_code_byte & kFunctionCodeMask);
+  auto function_code = static_cast<FunctionCode>(function_code_byte & kFunctionCodeMask);
 
   if (is_exception) {
-    // Exception response: slave_id (1) + function_code (1) + exception_code (1) + CRC (2) = 5 bytes
-    return frame.size() >= 5;
+    // Exception response: slave_id (1) + function_code (1) + exception_code (1) + CRC (2)
+    return frame.size() >= kExceptionResponseFrameSize;
   }
 
   // For read function codes, responses have variable length based on byte_count
@@ -230,8 +227,8 @@ bool RtuFrame::IsResponseFrameComplete(std::span<uint8_t const> frame) {
 
   // For write single operations, responses echo back address and value
   if (function_code == FunctionCode::kWriteSingleReg || function_code == FunctionCode::kWriteSingleCoil) {
-    // Response format: slave_id (1) + function_code (1) + address (2) + value (2) + CRC (2) = 8 bytes
-    return frame.size() >= 8;
+    // Response format: slave_id (1) + function_code (1) + address (2) + value (2) + CRC (2)
+    return frame.size() >= kWriteSingleFrameSize;
   }
 
   // For other function codes, use the minimum frame size
@@ -255,11 +252,11 @@ bool RtuFrame::IsFrameComplete(std::span<uint8_t const> frame) {
   }
 
   // For read operations, try to determine by frame size
-  FunctionCode function_code = static_cast<FunctionCode>(function_code_byte & kFunctionCodeMask);
+  auto function_code = static_cast<FunctionCode>(function_code_byte & kFunctionCodeMask);
   if (function_code == FunctionCode::kReadHR || function_code == FunctionCode::kReadIR ||
       function_code == FunctionCode::kReadCoils || function_code == FunctionCode::kReadDI) {
-    // Request is always 8 bytes, response is variable
-    if (frame.size() == 8) {
+    // Request is always kWriteSingleFrameSize bytes, response is variable
+    if (frame.size() == kWriteSingleFrameSize) {
       return IsRequestFrameComplete(frame);
     }
     // Otherwise, assume it's a response

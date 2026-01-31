@@ -46,7 +46,7 @@ std::vector<uint8_t> RtuFrame::EncodeResponse(RtuResponse const &response) {
   if (response.GetExceptionCode() != ExceptionCode::kInvalidExceptionCode &&
       response.GetExceptionCode() != ExceptionCode::kAcknowledge) {
     // Exception response: function code with MSB set
-    function_code = static_cast<FunctionCode>(static_cast<uint8_t>(function_code) | 0x80);
+    function_code = static_cast<FunctionCode>(static_cast<uint8_t>(function_code) | kExceptionFunctionCodeMask);
   }
   frame.push_back(static_cast<uint8_t>(function_code));
 
@@ -82,7 +82,7 @@ std::optional<RtuRequest> RtuFrame::DecodeRequest(std::span<uint8_t const> frame
 
   // Extract slave ID and function code
   uint8_t slave_id = frame[0];
-  FunctionCode function_code = static_cast<FunctionCode>(frame[1]);
+  auto function_code = static_cast<FunctionCode>(frame[1]);
 
   // Extract data (everything between function code and CRC)
   std::vector<uint8_t> data;
@@ -149,8 +149,8 @@ std::optional<RtuResponse> RtuFrame::DecodeResponse(std::span<uint8_t const> fra
   uint8_t function_code_byte = frame[1];
 
   // Check if this is an exception response (MSB set)
-  bool is_exception = (function_code_byte & 0x80) != 0;
-  FunctionCode function_code = static_cast<FunctionCode>(function_code_byte & 0x7F);
+  bool is_exception = (function_code_byte & kExceptionFunctionCodeMask) != 0;
+  FunctionCode function_code = static_cast<FunctionCode>(function_code_byte & kFunctionCodeMask);
 
   RtuResponse response(slave_id, function_code);
 
@@ -197,7 +197,7 @@ bool RtuFrame::IsRequestFrameComplete(std::span<uint8_t const> frame) {
     return false;  // Need at least slave_id and function_code
   }
 
-  FunctionCode function_code = static_cast<FunctionCode>(frame[1] & 0x7F);
+  FunctionCode function_code = static_cast<FunctionCode>(frame[1] & kFunctionCodeMask);
   size_t min_size = GetMinFrameSize(function_code);
   return frame.size() >= min_size;
 }
@@ -208,8 +208,8 @@ bool RtuFrame::IsResponseFrameComplete(std::span<uint8_t const> frame) {
   }
 
   uint8_t function_code_byte = frame[1];
-  bool is_exception = (function_code_byte & 0x80) != 0;
-  FunctionCode function_code = static_cast<FunctionCode>(function_code_byte & 0x7F);
+  bool is_exception = (function_code_byte & kExceptionFunctionCodeMask) != 0;
+  FunctionCode function_code = static_cast<FunctionCode>(function_code_byte & kFunctionCodeMask);
 
   if (is_exception) {
     // Exception response: slave_id (1) + function_code (1) + exception_code (1) + CRC (2) = 5 bytes
@@ -247,7 +247,7 @@ bool RtuFrame::IsFrameComplete(std::span<uint8_t const> frame) {
   }
 
   uint8_t function_code_byte = frame[1];
-  bool is_exception = (function_code_byte & 0x80) != 0;
+  bool is_exception = (function_code_byte & kExceptionFunctionCodeMask) != 0;
 
   // Exception responses are always responses
   if (is_exception) {
@@ -255,7 +255,7 @@ bool RtuFrame::IsFrameComplete(std::span<uint8_t const> frame) {
   }
 
   // For read operations, try to determine by frame size
-  FunctionCode function_code = static_cast<FunctionCode>(function_code_byte & 0x7F);
+  FunctionCode function_code = static_cast<FunctionCode>(function_code_byte & kFunctionCodeMask);
   if (function_code == FunctionCode::kReadHR || function_code == FunctionCode::kReadIR ||
       function_code == FunctionCode::kReadCoils || function_code == FunctionCode::kReadDI) {
     // Request is always 8 bytes, response is variable

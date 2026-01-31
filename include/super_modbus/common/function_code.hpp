@@ -27,15 +27,25 @@ enum class FunctionCode : uint8_t {
 };
 
 /**
+ * @brief Exception function code mask - sets MSB to indicate exception response
+ * In Modbus RTU, exception responses have the function code with bit 7 (0x80) set
+ */
+static constexpr uint8_t kExceptionFunctionCodeMask = 0x80;
+
+/**
+ * @brief Function code mask - clears MSB to get base function code
+ * Used to extract the base function code from an exception response
+ */
+static constexpr uint8_t kFunctionCodeMask = 0x7F;
+
+/**
  * @brief Check if a function code is a write operation that can be broadcast
  * @param function_code The function code to check
  * @return true if the function code is a write operation that supports broadcast (slave ID 0)
  */
 constexpr bool IsBroadcastableWrite(FunctionCode function_code) {
-  return function_code == FunctionCode::kWriteSingleCoil ||
-         function_code == FunctionCode::kWriteSingleReg ||
-         function_code == FunctionCode::kWriteMultCoils ||
-         function_code == FunctionCode::kWriteMultRegs ||
+  return function_code == FunctionCode::kWriteSingleCoil || function_code == FunctionCode::kWriteSingleReg ||
+         function_code == FunctionCode::kWriteMultCoils || function_code == FunctionCode::kWriteMultRegs ||
          function_code == FunctionCode::kWriteFileRecord;
 }
 

@@ -18,6 +18,8 @@ add_library(${PROJECT_NAME}-lib
     src/super_modbus.cpp
     src/rtu/rtu_request.cpp
     src/rtu/rtu_slave.cpp
+    src/rtu/rtu_frame.cpp
+    src/rtu/rtu_master.cpp
 )
 
 # target_link_libraries(${PROJECT_NAME}-lib PRIVATE
@@ -43,8 +45,34 @@ target_link_libraries(${PROJECT_NAME}
     ${PROJECT_NAME}-lib
 )
 
-# target_include_directories(${PROJECT_NAME} PRIVATE
-# )
+###################################
+# Examples
+###################################
+option(BUILD_EXAMPLES "Build example programs" ON)
+if (BUILD_EXAMPLES)
+    add_executable(example_master examples/example_master.cpp)
+    target_link_libraries(example_master PRIVATE ${PROJECT_NAME}-lib)
+
+    add_executable(example_slave examples/example_slave.cpp)
+    target_link_libraries(example_slave PRIVATE ${PROJECT_NAME}-lib)
+
+    add_executable(example_loopback examples/example_master_slave_loopback.cpp)
+    target_link_libraries(example_loopback PRIVATE ${PROJECT_NAME}-lib)
+
+    add_executable(testable_slave examples/testable_slave.cpp)
+    target_link_libraries(testable_slave PRIVATE ${PROJECT_NAME}-lib)
+
+    add_executable(example_virtual_port_test examples/example_virtual_port_test.cpp)
+    target_link_libraries(example_virtual_port_test PRIVATE ${PROJECT_NAME}-lib)
+    target_include_directories(example_virtual_port_test PRIVATE examples/)
+
+    add_executable(test_master_comprehensive examples/test_master_comprehensive.cpp)
+    target_link_libraries(test_master_comprehensive PRIVATE ${PROJECT_NAME}-lib)
+    target_include_directories(test_master_comprehensive PRIVATE examples/)
+
+    # Note: example_serial_transport.cpp is a template, not meant to be compiled
+    # Note: serial_transport.hpp is a header-only implementation for use in examples
+endif()
 
 ###################################
 # Testing and Coverage

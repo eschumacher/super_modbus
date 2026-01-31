@@ -25,6 +25,11 @@ using supermb::RtuRequest;
 using supermb::RtuResponse;
 using supermb::RtuSlave;
 
+// Test constants
+namespace {
+constexpr uint32_t kTestTimeoutMs = 100;  // Timeout for test operations (100ms)
+}  // namespace
+
 // Helper class to simulate master-slave communication
 class MasterSlaveSimulator {
  public:
@@ -51,7 +56,7 @@ class MasterSlaveSimulator {
     transport_.ResetReadPosition();
 
     // Slave processes and writes response
-    slave_.ProcessIncomingFrame(transport_, 100);
+    slave_.ProcessIncomingFrame(transport_, kTestTimeoutMs);
 
     // Get slave response from transport write buffer
     auto slave_response = transport_.GetWrittenData();
@@ -86,19 +91,21 @@ TEST(MasterIntegration, ReadHoldingRegisters) {
   sim.SetupRegisters({0, 10});
 
   // Set values using master (this tests the full round-trip)
+  static constexpr int16_t kTestRegisterValue1 = 100;
   RtuRequest write_req1{{kSlaveId, FunctionCode::kWriteSingleReg}};
-  write_req1.SetWriteSingleRegisterData(0, 100);
+  write_req1.SetWriteSingleRegisterData(0, kTestRegisterValue1);
   sim.SendRequestOnly(write_req1);
   sim.ProcessMasterRequest();
-  auto write_resp1 = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto write_resp1 = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(write_resp1.has_value());
   EXPECT_EQ(write_resp1->GetExceptionCode(), ExceptionCode::kAcknowledge);
 
+  static constexpr int16_t kTestRegisterValue2 = 200;
   RtuRequest write_req2{{kSlaveId, FunctionCode::kWriteSingleReg}};
-  write_req2.SetWriteSingleRegisterData(1, 200);
+  write_req2.SetWriteSingleRegisterData(1, kTestRegisterValue2);
   sim.SendRequestOnly(write_req2);
   sim.ProcessMasterRequest();
-  auto write_resp2 = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto write_resp2 = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(write_resp2.has_value());
   EXPECT_EQ(write_resp2->GetExceptionCode(), ExceptionCode::kAcknowledge);
 
@@ -111,15 +118,15 @@ TEST(MasterIntegration, ReadHoldingRegisters) {
   sim.ProcessMasterRequest();
 
   // Master receives
-  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(response.has_value());
   EXPECT_EQ(response->GetExceptionCode(), ExceptionCode::kAcknowledge);
   auto data = response->GetData();
   // Read register responses include byte_count (1 byte) + register data (2 registers * 2 bytes = 4 bytes)
   ASSERT_EQ(data.size(), 5);
   // Skip byte_count byte, then read register values (low byte first, then high byte)
-  EXPECT_EQ(MakeInt16(data[1], data[2]), 100);
-  EXPECT_EQ(MakeInt16(data[3], data[4]), 200);
+  EXPECT_EQ(MakeInt16(data[1], data[2]), kTestRegisterValue1);
+  EXPECT_EQ(MakeInt16(data[3], data[4]), kTestRegisterValue2);
 }
 
 TEST(MasterIntegration, ReadInputRegisters) {
@@ -131,10 +138,10 @@ TEST(MasterIntegration, ReadInputRegisters) {
   // Master reads input registers - simulate round-trip
   RtuRequest read_req{{kSlaveId, FunctionCode::kReadIR}};
   read_req.SetAddressSpan({0, 5});
-  (void)sim.GetMaster().SendRequest(read_req, 100);
+  (void)sim.GetMaster().SendRequest(read_req, kTestTimeoutMs);
   sim.ProcessMasterRequest();
 
-  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(response.has_value());
   EXPECT_EQ(response->GetExceptionCode(), ExceptionCode::kAcknowledge);
   // Read register responses include byte_count (1 byte) + register data (5 registers * 2 bytes = 10 bytes)
@@ -148,12 +155,13 @@ TEST(MasterIntegration, WriteSingleRegister) {
   sim.SetupRegisters({0, 10});
 
   // Master writes - simulate round-trip
+  static constexpr int16_t kTestRegisterValue = 0x1234;
   RtuRequest write_req{{kSlaveId, FunctionCode::kWriteSingleReg}};
-  write_req.SetWriteSingleRegisterData(0, 0x1234);
+  write_req.SetWriteSingleRegisterData(0, kTestRegisterValue);
   sim.SendRequestOnly(write_req);
   sim.ProcessMasterRequest();
 
-  auto write_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto write_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(write_response.has_value());
   EXPECT_EQ(write_response->GetExceptionCode(), ExceptionCode::kAcknowledge);
 
@@ -163,12 +171,12 @@ TEST(MasterIntegration, WriteSingleRegister) {
   sim.SendRequestOnly(read_req);
   sim.ProcessMasterRequest();
 
-  auto read_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto read_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(read_response.has_value());
   auto data = read_response->GetData();
   ASSERT_EQ(data.size(), 3);  // byte_count (1) + 1 register * 2 bytes
   EXPECT_EQ(data[0], 2);      // byte_count for 1 register
-  EXPECT_EQ(MakeInt16(data[1], data[2]), 0x1234);
+  EXPECT_EQ(MakeInt16(data[1], data[2]), kTestRegisterValue);
 }
 
 TEST(MasterIntegration, ReadCoils) {
@@ -190,10 +198,10 @@ TEST(MasterIntegration, ReadCoils) {
   // Master reads - simulate round-trip
   RtuRequest read_req{{kSlaveId, FunctionCode::kReadCoils}};
   read_req.SetAddressSpan({0, 3});
-  (void)sim.GetMaster().SendRequest(read_req, 100);
+  (void)sim.GetMaster().SendRequest(read_req, kTestTimeoutMs);
   sim.ProcessMasterRequest();
 
-  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(response.has_value());
   EXPECT_EQ(response->GetExceptionCode(), ExceptionCode::kAcknowledge);
   auto data = response->GetData();
@@ -212,10 +220,10 @@ TEST(MasterIntegration, ReadDiscreteInputs) {
   // Master reads discrete inputs - simulate round-trip
   RtuRequest read_req{{kSlaveId, FunctionCode::kReadDI}};
   read_req.SetAddressSpan({0, 5});
-  (void)sim.GetMaster().SendRequest(read_req, 100);
+  (void)sim.GetMaster().SendRequest(read_req, kTestTimeoutMs);
   sim.ProcessMasterRequest();
 
-  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(response.has_value());
   EXPECT_EQ(response->GetExceptionCode(), ExceptionCode::kAcknowledge);
   auto data = response->GetData();
@@ -231,20 +239,20 @@ TEST(MasterIntegration, WriteSingleCoil) {
   // Master writes coil - simulate round-trip
   RtuRequest write_req{{kSlaveId, FunctionCode::kWriteSingleCoil}};
   write_req.SetWriteSingleCoilData(0, true);
-  (void)sim.GetMaster().SendRequest(write_req, 100);
+  (void)sim.GetMaster().SendRequest(write_req, kTestTimeoutMs);
   sim.ProcessMasterRequest();
 
-  auto write_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto write_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(write_response.has_value());
   EXPECT_EQ(write_response->GetExceptionCode(), ExceptionCode::kAcknowledge);
 
   // Verify by reading back
   RtuRequest read_req{{kSlaveId, FunctionCode::kReadCoils}};
   read_req.SetAddressSpan({0, 1});
-  (void)sim.GetMaster().SendRequest(read_req, 100);
+  (void)sim.GetMaster().SendRequest(read_req, kTestTimeoutMs);
   sim.ProcessMasterRequest();
 
-  auto read_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto read_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(read_response.has_value());
   auto data = read_response->GetData();
   EXPECT_TRUE((data[1] & 0x01) != 0);
@@ -260,20 +268,20 @@ TEST(MasterIntegration, WriteMultipleRegisters) {
   RtuRequest write_req{{kSlaveId, FunctionCode::kWriteMultRegs}};
   std::array<int16_t, 4> values{100, 200, 300, 400};
   write_req.SetWriteMultipleRegistersData(0, 4, values);
-  (void)sim.GetMaster().SendRequest(write_req, 100);
+  (void)sim.GetMaster().SendRequest(write_req, kTestTimeoutMs);
   sim.ProcessMasterRequest();
 
-  auto write_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto write_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(write_response.has_value());
   EXPECT_EQ(write_response->GetExceptionCode(), ExceptionCode::kAcknowledge);
 
   // Verify by reading back
   RtuRequest read_req{{kSlaveId, FunctionCode::kReadHR}};
   read_req.SetAddressSpan({0, 4});
-  (void)sim.GetMaster().SendRequest(read_req, 100);
+  (void)sim.GetMaster().SendRequest(read_req, kTestTimeoutMs);
   sim.ProcessMasterRequest();
 
-  auto read_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto read_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(read_response.has_value());
   auto data = read_response->GetData();
   ASSERT_EQ(data.size(), 9);  // byte_count (1) + 4 registers * 2 bytes
@@ -294,20 +302,20 @@ TEST(MasterIntegration, WriteMultipleCoils) {
   RtuRequest write_req{{kSlaveId, FunctionCode::kWriteMultCoils}};
   std::array<bool, 5> values{true, false, true, true, false};
   write_req.SetWriteMultipleCoilsData(0, 5, values);
-  (void)sim.GetMaster().SendRequest(write_req, 100);
+  (void)sim.GetMaster().SendRequest(write_req, kTestTimeoutMs);
   sim.ProcessMasterRequest();
 
-  auto write_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto write_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(write_response.has_value());
   EXPECT_EQ(write_response->GetExceptionCode(), ExceptionCode::kAcknowledge);
 
   // Verify by reading back
   RtuRequest read_req{{kSlaveId, FunctionCode::kReadCoils}};
   read_req.SetAddressSpan({0, 5});
-  (void)sim.GetMaster().SendRequest(read_req, 100);
+  (void)sim.GetMaster().SendRequest(read_req, kTestTimeoutMs);
   sim.ProcessMasterRequest();
 
-  auto read_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto read_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(read_response.has_value());
   auto data = read_response->GetData();
   EXPECT_TRUE((data[1] & 0x01) != 0);
@@ -327,7 +335,7 @@ TEST(MasterIntegration, ReadExceptionStatus) {
   sim.SendRequestOnly(read_req);
   sim.ProcessMasterRequest();
 
-  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(response.has_value());
   EXPECT_EQ(response->GetExceptionCode(), ExceptionCode::kAcknowledge);
   auto data = response->GetData();
@@ -344,10 +352,10 @@ TEST(MasterIntegration, Diagnostics) {
   RtuRequest diag_req{{kSlaveId, FunctionCode::kDiagnostics}};
   std::vector<uint8_t> test_data{0x12, 0x34, 0x56};
   diag_req.SetDiagnosticsData(0x0000, test_data);
-  (void)sim.GetMaster().SendRequest(diag_req, 100);
+  (void)sim.GetMaster().SendRequest(diag_req, kTestTimeoutMs);
   sim.ProcessMasterRequest();
 
-  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(response.has_value());
   EXPECT_EQ(response->GetExceptionCode(), ExceptionCode::kAcknowledge);
   auto data = response->GetData();
@@ -362,10 +370,10 @@ TEST(MasterIntegration, GetComEventCounter) {
 
   // Master gets com event counter - simulate round-trip
   RtuRequest req{{kSlaveId, FunctionCode::kGetComEventCounter}};
-  (void)sim.GetMaster().SendRequest(req, 100);
+  (void)sim.GetMaster().SendRequest(req, kTestTimeoutMs);
   sim.ProcessMasterRequest();
 
-  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(response.has_value());
   EXPECT_EQ(response->GetExceptionCode(), ExceptionCode::kAcknowledge);
   auto data = response->GetData();
@@ -380,10 +388,10 @@ TEST(MasterIntegration, GetComEventLog) {
 
   // Master gets com event log - simulate round-trip
   RtuRequest req{{kSlaveId, FunctionCode::kGetComEventLog}};
-  (void)sim.GetMaster().SendRequest(req, 100);
+  (void)sim.GetMaster().SendRequest(req, kTestTimeoutMs);
   sim.ProcessMasterRequest();
 
-  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(response.has_value());
   EXPECT_EQ(response->GetExceptionCode(), ExceptionCode::kAcknowledge);
   auto data = response->GetData();
@@ -397,10 +405,10 @@ TEST(MasterIntegration, ReportSlaveID) {
 
   // Master requests slave ID - simulate round-trip
   RtuRequest req{{kSlaveId, FunctionCode::kReportSlaveID}};
-  (void)sim.GetMaster().SendRequest(req, 100);
+  (void)sim.GetMaster().SendRequest(req, kTestTimeoutMs);
   sim.ProcessMasterRequest();
 
-  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(response.has_value());
   EXPECT_EQ(response->GetExceptionCode(), ExceptionCode::kAcknowledge);
   auto data = response->GetData();
@@ -428,7 +436,7 @@ TEST(MasterIntegration, MaskWriteRegister) {
   sim.SendRequestOnly(mask_req);
   sim.ProcessMasterRequest();
 
-  auto mask_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto mask_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(mask_response.has_value());
   EXPECT_EQ(mask_response->GetExceptionCode(), ExceptionCode::kAcknowledge);
 
@@ -438,7 +446,7 @@ TEST(MasterIntegration, MaskWriteRegister) {
   sim.SendRequestOnly(read_req);
   sim.ProcessMasterRequest();
 
-  auto read_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto read_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(read_response.has_value());
   auto data = read_response->GetData();
   ASSERT_EQ(data.size(), 3);  // byte_count (1) + 1 register * 2 bytes
@@ -469,7 +477,7 @@ TEST(MasterIntegration, ReadWriteMultipleRegisters) {
   sim.SendRequestOnly(rw_req);
   sim.ProcessMasterRequest();
 
-  auto rw_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto rw_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(rw_response.has_value());
   EXPECT_EQ(rw_response->GetExceptionCode(), ExceptionCode::kAcknowledge);
   auto read_data = rw_response->GetData();
@@ -483,7 +491,7 @@ TEST(MasterIntegration, ReadWriteMultipleRegisters) {
   sim.SendRequestOnly(verify_req);
   sim.ProcessMasterRequest();
 
-  auto verify_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto verify_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(verify_response.has_value());
   auto verify_data = verify_response->GetData();
   ASSERT_GE(verify_data.size(), 5);  // byte_count (1) + 2 registers (4 bytes)
@@ -523,10 +531,10 @@ TEST(MasterIntegration, SendRequestWithResponse) {
   request.SetAddressSpan({0, 3});
 
   // Send via master and process
-  (void)sim.GetMaster().SendRequest(request, 100);
+  (void)sim.GetMaster().SendRequest(request, kTestTimeoutMs);
   sim.ProcessMasterRequest();
 
-  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(response.has_value());
   EXPECT_EQ(response->GetExceptionCode(), ExceptionCode::kAcknowledge);
   EXPECT_EQ(response->GetData().size(), 7);  // byte_count (1) + 3 registers * 2 bytes
@@ -544,7 +552,7 @@ TEST(MasterIntegration, MasterErrorHandling_InvalidAddress) {
   sim.SendRequestOnly(read_req);
   sim.ProcessMasterRequest();
 
-  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(response.has_value());
   // Slave should return exception
   EXPECT_NE(response->GetExceptionCode(), ExceptionCode::kAcknowledge);
@@ -560,11 +568,11 @@ TEST(MasterIntegration, MasterErrorHandling_WrongSlaveID) {
   // Try to read from wrong slave ID - simulate round-trip
   RtuRequest read_req{{kWrongSlaveId, FunctionCode::kReadHR}};
   read_req.SetAddressSpan({0, 5});
-  (void)sim.GetMaster().SendRequest(read_req, 100);
+  (void)sim.GetMaster().SendRequest(read_req, kTestTimeoutMs);
   sim.ProcessMasterRequest();
 
   // Slave won't process (wrong ID), so no response
-  auto response = sim.GetMaster().ReceiveResponse(kWrongSlaveId, 100);
+  auto response = sim.GetMaster().ReceiveResponse(kWrongSlaveId, kTestTimeoutMs);
   // Should timeout or return empty
   EXPECT_FALSE(response.has_value());
 }
@@ -592,19 +600,19 @@ TEST(MasterIntegration, MultipleSequentialOperations) {
   write_reg1.SetWriteSingleRegisterData(0, 100);
   sim.SendRequestOnly(write_reg1);
   sim.ProcessMasterRequest();
-  (void)sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  (void)sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
 
   RtuRequest write_coil1{{kSlaveId, FunctionCode::kWriteSingleCoil}};
   write_coil1.SetWriteSingleCoilData(0, true);
   sim.SendRequestOnly(write_coil1);
   sim.ProcessMasterRequest();
-  (void)sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  (void)sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
 
   RtuRequest write_reg2{{kSlaveId, FunctionCode::kWriteSingleReg}};
   write_reg2.SetWriteSingleRegisterData(1, 200);
   sim.SendRequestOnly(write_reg2);
   sim.ProcessMasterRequest();
-  auto write_resp2 = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto write_resp2 = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(write_resp2.has_value());
   EXPECT_EQ(write_resp2->GetExceptionCode(), ExceptionCode::kAcknowledge);
 
@@ -612,14 +620,14 @@ TEST(MasterIntegration, MultipleSequentialOperations) {
   write_coil2.SetWriteSingleCoilData(1, false);
   sim.SendRequestOnly(write_coil2);
   sim.ProcessMasterRequest();
-  (void)sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  (void)sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
 
   // Read them back
   RtuRequest read_reg{{kSlaveId, FunctionCode::kReadHR}};
   read_reg.SetAddressSpan({0, 2});
   sim.SendRequestOnly(read_reg);
   sim.ProcessMasterRequest();
-  auto reg_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto reg_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(reg_response.has_value());
   auto reg_data = reg_response->GetData();
   ASSERT_GE(reg_data.size(), 5);  // byte_count (1) + 2 registers (4 bytes)
@@ -631,7 +639,7 @@ TEST(MasterIntegration, MultipleSequentialOperations) {
   read_coil.SetAddressSpan({0, 2});
   sim.SendRequestOnly(read_coil);
   sim.ProcessMasterRequest();
-  auto coil_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto coil_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(coil_response.has_value());
   auto coil_data = coil_response->GetData();
   EXPECT_TRUE((coil_data[1] & 0x01) != 0);
@@ -657,7 +665,7 @@ TEST(MasterIntegration, LargeDataTransfer) {
   // Manually send request (encode and write)
   sim.SendRequestOnly(write_req);
   sim.ProcessMasterRequest();
-  auto write_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto write_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(write_response.has_value());
   EXPECT_EQ(write_response->GetExceptionCode(), ExceptionCode::kAcknowledge);
 
@@ -666,7 +674,7 @@ TEST(MasterIntegration, LargeDataTransfer) {
   read_req.SetAddressSpan({0, kRegisterCount});
   sim.SendRequestOnly(read_req);
   sim.ProcessMasterRequest();
-  auto read_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto read_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(read_response.has_value());
   auto data = read_response->GetData();
   ASSERT_EQ(data.size(), 1 + kRegisterCount * 2);  // byte_count (1) + registers * 2
@@ -711,7 +719,7 @@ TEST(MasterIntegration, ReadFileRecord) {
 
   sim.SendRequestOnly(read_req);
   sim.ProcessMasterRequest();
-  auto read_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto read_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(read_response.has_value());
   EXPECT_EQ(read_response->GetExceptionCode(), ExceptionCode::kAcknowledge);
 
@@ -812,7 +820,7 @@ TEST(MasterIntegration, CoilPacking) {
   write_req.SetWriteMultipleCoilsData(0, kTestCoilCount, coil_values);
   sim.SendRequestOnly(write_req);
   sim.ProcessMasterRequest();
-  auto write_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto write_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(write_response.has_value());
   EXPECT_EQ(write_response->GetExceptionCode(), ExceptionCode::kAcknowledge);
 
@@ -821,7 +829,7 @@ TEST(MasterIntegration, CoilPacking) {
   read_req.SetAddressSpan({0, kTestCoilCount});
   sim.SendRequestOnly(read_req);
   sim.ProcessMasterRequest();
-  auto read_response = sim.GetMaster().ReceiveResponse(kSlaveId, 100);
+  auto read_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
   ASSERT_TRUE(read_response.has_value());
   auto data = read_response->GetData();
   ASSERT_GE(data.size(), 3);  // byte_count + 2 bytes

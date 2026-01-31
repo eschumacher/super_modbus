@@ -13,6 +13,17 @@ FetchContent_MakeAvailable(googletest)
 add_executable(run_tests
     test_gtest.cpp
     rtu/test_rtu_slave.cpp
+    rtu/test_rtu_master.cpp
+    rtu/test_new_function_codes.cpp
+    rtu/test_remaining_function_codes.cpp
+    rtu/test_error_handling.cpp
+    rtu/test_edge_cases.cpp
+    rtu/test_integration.cpp
+    rtu/test_master_integration.cpp
+    rtu/test_master_errors.cpp
+    rtu/test_broadcast.cpp
+    rtu/test_fifo_queue.cpp
+    rtu/test_event_log.cpp
 )
 
 target_link_libraries(run_tests PRIVATE

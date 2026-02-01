@@ -151,7 +151,7 @@ int main() {
   // Example 7: Broadcast write
   std::cout << "\nExample 7: Broadcast write (slave ID 0)\n";
   std::cout << "  Master broadcasting write to all slaves...\n";
-  success = master.WriteSingleRegister(0, 0, 0xABCD);  // Broadcast
+  success = master.WriteSingleRegister(0, 0, static_cast<int16_t>(0xABCD));  // Broadcast
   // Note: Broadcast doesn't get a response, so no need to simulate
   if (success) {
     std::cout << "  Broadcast successful (no response expected)\n";

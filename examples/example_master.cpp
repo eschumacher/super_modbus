@@ -89,7 +89,7 @@ int main() {
 
   // Example 8: Broadcast write (slave ID 0)
   std::cout << "\nExample 8: Broadcast write to all slaves (slave ID 0)...\n";
-  success = master.WriteSingleRegister(0, 0, 0xABCD);  // Broadcast
+  success = master.WriteSingleRegister(0, 0, static_cast<int16_t>(0xABCD));  // Broadcast
   if (success) {
     std::cout << "  Broadcast write successful (no response expected)\n";
   }

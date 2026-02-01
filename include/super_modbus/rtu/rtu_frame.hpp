@@ -80,7 +80,7 @@ class RtuFrame {
   static constexpr size_t kMinFrameSize = 4;  // slave_id + function_code + CRC (2 bytes)
   static constexpr size_t kCrcSize = 2;
   static constexpr size_t kExceptionResponseFrameSize = 5;  // slave_id + function_code + exception_code + CRC
-  static constexpr size_t kWriteSingleFrameSize = 8;  // slave_id + function_code + address (2) + value (2) + CRC
+  static constexpr size_t kWriteSingleFrameSize = 8;        // slave_id + function_code + address (2) + value (2) + CRC
 };
 
 }  // namespace supermb

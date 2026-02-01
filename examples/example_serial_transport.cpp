@@ -32,7 +32,7 @@ class ExampleSerialTransport : public ByteTransport {
    * @param port_name Serial port name (e.g., "/dev/ttyUSB0" on Linux, "COM3" on Windows)
    * @param baud_rate Baud rate (e.g., 9600, 19200, 38400, 115200)
    */
-  ExampleSerialTransport(const char* port_name, int baud_rate) {
+  ExampleSerialTransport(char const *port_name, int baud_rate) {
     // TODO: Open serial port
     // Example (pseudo-code):
     //   serial_fd_ = open(port_name, O_RDWR | O_NOCTTY);

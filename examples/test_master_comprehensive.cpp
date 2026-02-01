@@ -33,15 +33,15 @@ using supermb::RtuMaster;
 using supermb::RtuSlave;
 using supermb::SerialTransport;
 
-volatile bool g_running = true;
-volatile bool g_slave_running = false;
+bool volatile g_running = true;
+bool volatile g_slave_running = false;
 
 void signal_handler(int signal) {
   (void)signal;
   g_running = false;
 }
 
-void RunSlave(const std::string& port, int baud_rate, uint8_t slave_id) {
+void RunSlave(std::string const &port, int baud_rate, uint8_t slave_id) {
   SerialTransport transport(port, baud_rate);
   if (!transport.IsOpen()) {
     std::cerr << "Error: Slave failed to open port: " << port << "\n";
@@ -80,7 +80,7 @@ struct TestResult {
   std::string error;
 };
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
   std::signal(SIGINT, signal_handler);
   std::signal(SIGTERM, signal_handler);
 
@@ -136,7 +136,7 @@ int main(int argc, char* argv[]) {
   int total_tests = 0;
   int passed_tests = 0;
 
-  auto run_test = [&](const std::string& name, std::function<bool()> test_func) {
+  auto run_test = [&](std::string const &name, std::function<bool()> test_func) {
     total_tests++;
     std::cout << "Test " << total_tests << ": " << name << "... ";
     std::cout.flush();
@@ -145,7 +145,7 @@ int main(int argc, char* argv[]) {
     std::string error;
     try {
       passed = test_func();
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
       error = e.what();
       passed = false;
     }
@@ -194,9 +194,8 @@ int main(int argc, char* argv[]) {
   std::cout << "\n=== Write Operations (Round-trip) ===\n\n";
 
   // FC 6: Write Single Register
-  run_test("FC 6: Write Single Register (address 0 = 1234)", [&]() {
-    return master.WriteSingleRegister(slave_id, 0, 1234);
-  });
+  run_test("FC 6: Write Single Register (address 0 = 1234)",
+           [&]() { return master.WriteSingleRegister(slave_id, 0, 1234); });
 
   run_test("FC 3: Read back register 0 (should be 1234)", [&]() {
     auto regs = master.ReadHoldingRegisters(slave_id, 0, 1);
@@ -204,9 +203,8 @@ int main(int argc, char* argv[]) {
   });
 
   // FC 6: Write another register
-  run_test("FC 6: Write Single Register (address 1 = 5678)", [&]() {
-    return master.WriteSingleRegister(slave_id, 1, 5678);
-  });
+  run_test("FC 6: Write Single Register (address 1 = 5678)",
+           [&]() { return master.WriteSingleRegister(slave_id, 1, 5678); });
 
   run_test("FC 3: Read back register 1 (should be 5678)", [&]() {
     auto regs = master.ReadHoldingRegisters(slave_id, 1, 1);
@@ -226,9 +224,7 @@ int main(int argc, char* argv[]) {
   });
 
   // FC 5: Write Single Coil
-  run_test("FC 5: Write Single Coil (address 0 = ON)", [&]() {
-    return master.WriteSingleCoil(slave_id, 0, true);
-  });
+  run_test("FC 5: Write Single Coil (address 0 = ON)", [&]() { return master.WriteSingleCoil(slave_id, 0, true); });
 
   run_test("FC 1: Read back coil 0 (should be ON)", [&]() {
     auto coils = master.ReadCoils(slave_id, 0, 1);
@@ -236,9 +232,7 @@ int main(int argc, char* argv[]) {
   });
 
   // FC 5: Write Single Coil OFF
-  run_test("FC 5: Write Single Coil (address 0 = OFF)", [&]() {
-    return master.WriteSingleCoil(slave_id, 0, false);
-  });
+  run_test("FC 5: Write Single Coil (address 0 = OFF)", [&]() { return master.WriteSingleCoil(slave_id, 0, false); });
 
   run_test("FC 1: Read back coil 0 (should be OFF)", [&]() {
     auto coils = master.ReadCoils(slave_id, 0, 1);
@@ -318,8 +312,7 @@ int main(int argc, char* argv[]) {
     if ((*read_values)[0] != 100 || (*read_values)[1] != 200) return false;
     // Verify writes
     auto verify = master.ReadHoldingRegisters(slave_id, 20, 2);
-    return verify.has_value() && verify->size() == 2 &&
-           (*verify)[0] == 300 && (*verify)[1] == 400;
+    return verify.has_value() && verify->size() == 2 && (*verify)[0] == 300 && (*verify)[1] == 400;
   });
 
   // FC 24: Read FIFO Queue
@@ -327,8 +320,7 @@ int main(int argc, char* argv[]) {
     auto fifo = master.ReadFIFOQueue(slave_id, 0);
     if (!fifo.has_value() || fifo->size() != 4) return false;
     // Verify FIFO data
-    return (*fifo)[0] == 0x1111 && (*fifo)[1] == 0x2222 &&
-           (*fifo)[2] == 0x3333 && (*fifo)[3] == 0x4444;
+    return (*fifo)[0] == 0x1111 && (*fifo)[1] == 0x2222 && (*fifo)[2] == 0x3333 && (*fifo)[3] == 0x4444;
   });
 
   std::cout << "\n=== File Record Operations ===\n\n";
@@ -336,7 +328,8 @@ int main(int argc, char* argv[]) {
   // FC 21: Write File Record
   run_test("FC 21: Write File Record (file 1, record 0)", [&]() {
     std::vector<std::tuple<uint16_t, uint16_t, std::vector<int16_t>>> file_records;
-    std::vector<int16_t> record_data{static_cast<int16_t>(0xABCD), static_cast<int16_t>(0x1234), static_cast<int16_t>(0x5678)};
+    std::vector<int16_t> record_data{static_cast<int16_t>(0xABCD), static_cast<int16_t>(0x1234),
+                                     static_cast<int16_t>(0x5678)};
     file_records.push_back({1, 0, record_data});
     return master.WriteFileRecord(slave_id, file_records);
   });
@@ -350,8 +343,7 @@ int main(int argc, char* argv[]) {
     auto it = result->find({1, 0});
     if (it == result->end() || it->second.size() != 3) return false;
     // Verify data
-    return it->second[0] == static_cast<int16_t>(0xABCD) &&
-           it->second[1] == static_cast<int16_t>(0x1234) &&
+    return it->second[0] == static_cast<int16_t>(0xABCD) && it->second[1] == static_cast<int16_t>(0x1234) &&
            it->second[2] == static_cast<int16_t>(0x5678);
   });
 

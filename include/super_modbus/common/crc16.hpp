@@ -51,8 +51,8 @@ namespace supermb {
   uint16_t calculated_crc = CalculateCrc16(data_span);
 
   // Extract CRC from frame (little-endian: low byte first, then high byte)
-  uint16_t frame_crc = static_cast<uint16_t>(frame[frame.size() - 2]) |
-                       (static_cast<uint16_t>(frame[frame.size() - 1]) << 8);
+  uint16_t frame_crc =
+      static_cast<uint16_t>(frame[frame.size() - 2]) | (static_cast<uint16_t>(frame[frame.size() - 1]) << 8);
 
   return calculated_crc == frame_crc;
 }

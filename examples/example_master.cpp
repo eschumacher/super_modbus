@@ -82,7 +82,7 @@ int main() {
   std::vector<bool> coil_values{true, false, true, false, true};
   // Convert vector<bool> to regular bool array for span
   bool bool_array[5] = {coil_values[0], coil_values[1], coil_values[2], coil_values[3], coil_values[4]};
-  success = master.WriteMultipleCoils(1, 0, std::span<const bool>(bool_array));
+  success = master.WriteMultipleCoils(1, 0, std::span<bool const>(bool_array));
   if (success) {
     std::cout << "  Successfully wrote " << coil_values.size() << " coils\n";
   }
@@ -98,8 +98,7 @@ int main() {
   std::cout << "\nExample 9: Reading exception status from slave 1...\n";
   auto exception_status = master.ReadExceptionStatus(1);
   if (exception_status.has_value()) {
-    std::cout << "  Exception status: 0x" << std::hex
-              << static_cast<int>(*exception_status) << std::dec << "\n";
+    std::cout << "  Exception status: 0x" << std::hex << static_cast<int>(*exception_status) << std::dec << "\n";
   }
 
   // Example 10: Read FIFO queue

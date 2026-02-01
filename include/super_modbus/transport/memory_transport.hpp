@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -17,7 +18,8 @@ namespace supermb {
  */
 class MemoryTransport : public ByteTransport {
  public:
-  explicit MemoryTransport(size_t initial_capacity = 256) : read_buffer_(initial_capacity) {}
+  explicit MemoryTransport(size_t initial_capacity = 256)
+      : read_buffer_(initial_capacity) {}
 
   // ByteReader interface
   [[nodiscard]] int Read(std::span<uint8_t> buffer) override {
@@ -33,9 +35,7 @@ class MemoryTransport : public ByteTransport {
 
   [[nodiscard]] bool HasData() const override { return read_pos_ < read_buffer_.size(); }
 
-  [[nodiscard]] size_t AvailableBytes() const override {
-    return read_buffer_.size() - read_pos_;
-  }
+  [[nodiscard]] size_t AvailableBytes() const override { return read_buffer_.size() - read_pos_; }
 
   // ByteWriter interface
   [[nodiscard]] int Write(std::span<uint8_t const> data) override {

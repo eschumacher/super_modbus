@@ -124,7 +124,7 @@ int main() {
   // Convert vector<bool> to regular bool array for span
   bool bool_array[8] = {coil_values[0], coil_values[1], coil_values[2], coil_values[3],
                         coil_values[4], coil_values[5], coil_values[6], coil_values[7]};
-  success = master.WriteMultipleCoils(1, 0, std::span<const bool>(bool_array));
+  success = master.WriteMultipleCoils(1, 0, std::span<bool const>(bool_array));
   simulate_communication();
   if (success) {
     std::cout << "  Write successful!\n";
@@ -171,8 +171,7 @@ int main() {
   auto exception_status = master.ReadExceptionStatus(1);
   simulate_communication();
   if (exception_status.has_value()) {
-    std::cout << "  Exception status: 0x" << std::hex
-              << static_cast<int>(*exception_status) << std::dec << "\n";
+    std::cout << "  Exception status: 0x" << std::hex << static_cast<int>(*exception_status) << std::dec << "\n";
   }
 
   // Example 10: Read FIFO queue
@@ -188,8 +187,7 @@ int main() {
   if (fifo_result.has_value()) {
     std::cout << "  Read " << fifo_result->size() << " values from FIFO:\n";
     for (size_t i = 0; i < fifo_result->size(); ++i) {
-      std::cout << "    FIFO[" << i << "] = 0x" << std::hex
-                << (*fifo_result)[i] << std::dec << "\n";
+      std::cout << "    FIFO[" << i << "] = 0x" << std::hex << (*fifo_result)[i] << std::dec << "\n";
     }
   }
 

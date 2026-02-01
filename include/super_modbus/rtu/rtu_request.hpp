@@ -37,9 +37,7 @@ class RtuRequest {
   bool SetReadFileRecordData(std::span<std::tuple<uint16_t, uint16_t, uint16_t> const> file_records);
   bool SetWriteFileRecordData(std::span<std::tuple<uint16_t, uint16_t, std::vector<int16_t>> const> file_records);
   void SetRawData(std::vector<uint8_t> const &data) { data_ = data; }
-  void SetRawData(std::span<uint8_t const> data) {
-    data_.assign(data.begin(), data.end());
-  }
+  void SetRawData(std::span<uint8_t const> data) { data_.assign(data.begin(), data.end()); }
 
  private:
   Header header_;

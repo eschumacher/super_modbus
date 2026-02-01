@@ -32,14 +32,14 @@ using supermb::RtuMaster;
 using supermb::RtuSlave;
 using supermb::SerialTransport;
 
-volatile bool g_running = true;
+bool volatile g_running = true;
 
 void signal_handler(int signal) {
   (void)signal;
   g_running = false;
 }
 
-void RunMaster(const std::string& port, int baud_rate, uint8_t slave_id) {
+void RunMaster(std::string const &port, int baud_rate, uint8_t slave_id) {
   std::cout << "=== Modbus Master Mode ===\n";
   std::cout << "Port: " << port << "\n";
   std::cout << "Baud Rate: " << baud_rate << "\n";
@@ -103,7 +103,7 @@ void RunMaster(const std::string& port, int baud_rate, uint8_t slave_id) {
   std::cout << "Master test complete!\n";
 }
 
-void RunSlave(const std::string& port, int baud_rate, uint8_t slave_id) {
+void RunSlave(std::string const &port, int baud_rate, uint8_t slave_id) {
   std::cout << "=== Modbus Slave Mode ===\n";
   std::cout << "Port: " << port << "\n";
   std::cout << "Baud Rate: " << baud_rate << "\n";
@@ -169,7 +169,7 @@ void RunSlave(const std::string& port, int baud_rate, uint8_t slave_id) {
   std::cout << "Total requests processed: " << request_count << "\n";
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
   // Set up signal handlers
   std::signal(SIGINT, signal_handler);
   std::signal(SIGTERM, signal_handler);

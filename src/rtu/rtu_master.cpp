@@ -20,7 +20,7 @@ using supermb::IsBroadcastableWrite;
 namespace supermb {
 
 std::optional<std::vector<int16_t>> RtuMaster::ReadHoldingRegisters(uint8_t slave_id, uint16_t start_address,
-                                                                     uint16_t count) {
+                                                                    uint16_t count) {
   RtuRequest request({slave_id, FunctionCode::kReadHR});
   AddressSpan span{start_address, count};
   if (!request.SetAddressSpan(span)) {
@@ -60,7 +60,7 @@ std::optional<std::vector<int16_t>> RtuMaster::ReadHoldingRegisters(uint8_t slav
 }
 
 std::optional<std::vector<int16_t>> RtuMaster::ReadInputRegisters(uint8_t slave_id, uint16_t start_address,
-                                                                    uint16_t count) {
+                                                                  uint16_t count) {
   RtuRequest request({slave_id, FunctionCode::kReadIR});
   AddressSpan span{start_address, count};
   if (!request.SetAddressSpan(span)) {
@@ -152,7 +152,7 @@ std::optional<std::vector<bool>> RtuMaster::ReadCoils(uint8_t slave_id, uint16_t
 }
 
 std::optional<std::vector<bool>> RtuMaster::ReadDiscreteInputs(uint8_t slave_id, uint16_t start_address,
-                                                                 uint16_t count) {
+                                                               uint16_t count) {
   RtuRequest request({slave_id, FunctionCode::kReadDI});
   AddressSpan span{start_address, count};
   if (!request.SetAddressSpan(span)) {
@@ -249,7 +249,7 @@ std::optional<uint8_t> RtuMaster::ReadExceptionStatus(uint8_t slave_id) {
 }
 
 std::optional<std::vector<uint8_t>> RtuMaster::Diagnostics(uint8_t slave_id, uint16_t sub_function_code,
-                                                            std::span<uint8_t const> data) {
+                                                           std::span<uint8_t const> data) {
   RtuRequest request({slave_id, FunctionCode::kDiagnostics});
   if (!request.SetDiagnosticsData(sub_function_code, data)) {
     return {};
@@ -329,12 +329,12 @@ bool RtuMaster::MaskWriteRegister(uint8_t slave_id, uint16_t address, uint16_t a
   return (resp_address == address && resp_and == and_mask && resp_or == or_mask);
 }
 
-std::optional<std::vector<int16_t>> RtuMaster::ReadWriteMultipleRegisters(
-    uint8_t slave_id, uint16_t read_start, uint16_t read_count, uint16_t write_start,
-    std::span<int16_t const> write_values) {
+std::optional<std::vector<int16_t>> RtuMaster::ReadWriteMultipleRegisters(uint8_t slave_id, uint16_t read_start,
+                                                                          uint16_t read_count, uint16_t write_start,
+                                                                          std::span<int16_t const> write_values) {
   RtuRequest request({slave_id, FunctionCode::kReadWriteMultRegs});
   if (!request.SetReadWriteMultipleRegistersData(read_start, read_count, write_start,
-                                                  static_cast<uint16_t>(write_values.size()), write_values)) {
+                                                 static_cast<uint16_t>(write_values.size()), write_values)) {
     return {};
   }
   auto response = SendRequest(request);
@@ -418,7 +418,7 @@ std::optional<std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int1
   }
 
   std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int16_t>> result;
-  size_t offset = 1;  // Skip response_length
+  size_t offset = 1;                        // Skip response_length
   size_t end_offset = 1 + response_length;  // End of response data
 
   while (offset < end_offset) {
@@ -457,7 +457,7 @@ std::optional<std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int1
 }
 
 bool RtuMaster::WriteFileRecord(uint8_t slave_id,
-                                 std::span<std::tuple<uint16_t, uint16_t, std::vector<int16_t>> const> file_records) {
+                                std::span<std::tuple<uint16_t, uint16_t, std::vector<int16_t>> const> file_records) {
   RtuRequest request({slave_id, FunctionCode::kWriteFileRecord});
   if (!request.SetWriteFileRecordData(file_records)) {
     return false;

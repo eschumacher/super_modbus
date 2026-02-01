@@ -25,7 +25,9 @@ using supermb::RtuSlave;
 // Helper class to simulate master-slave communication
 class MasterSlaveSimulator {
  public:
-  MasterSlaveSimulator(uint8_t slave_id) : slave_(slave_id), master_(transport_) {}
+  MasterSlaveSimulator(uint8_t slave_id)
+      : slave_(slave_id),
+        master_(transport_) {}
 
   void SetupRegisters(AddressSpan span) { slave_.AddHoldingRegisters(span); }
   void SetupInputRegisters(AddressSpan span) { slave_.AddInputRegisters(span); }

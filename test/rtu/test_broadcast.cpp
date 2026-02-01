@@ -25,7 +25,9 @@ using supermb::RtuSlave;
 // Helper class to simulate master-slave communication
 class BroadcastSimulator {
  public:
-  BroadcastSimulator(uint8_t slave_id) : slave_(slave_id), master_(transport_) {}
+  BroadcastSimulator(uint8_t slave_id)
+      : slave_(slave_id),
+        master_(transport_) {}
 
   void SetupRegisters(AddressSpan span) { slave_.AddHoldingRegisters(span); }
   void SetupCoils(AddressSpan span) { slave_.AddCoils(span); }
@@ -131,7 +133,7 @@ TEST(Broadcast, MasterWriteMultipleCoils_Broadcast) {
   std::vector<bool> values{true, false, true, false};
   // Convert vector<bool> to regular bool array for span
   bool bool_array[4] = {values[0], values[1], values[2], values[3]};
-  bool result = sim.GetMaster().WriteMultipleCoils(kBroadcastId, 0, std::span<const bool>(bool_array));
+  bool result = sim.GetMaster().WriteMultipleCoils(kBroadcastId, 0, std::span<bool const>(bool_array));
 
   EXPECT_TRUE(result);
 

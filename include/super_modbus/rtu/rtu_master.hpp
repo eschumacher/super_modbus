@@ -43,7 +43,8 @@ class RtuMaster {
    * @brief Construct a Modbus RTU Master
    * @param transport Transport layer for byte I/O
    */
-  explicit RtuMaster(ByteTransport &transport) : transport_(transport) {}
+  explicit RtuMaster(ByteTransport &transport)
+      : transport_(transport) {}
 
   /**
    * @brief Read holding registers from a slave
@@ -53,7 +54,7 @@ class RtuMaster {
    * @return Vector of register values, or empty if error
    */
   [[nodiscard]] std::optional<std::vector<int16_t>> ReadHoldingRegisters(uint8_t slave_id, uint16_t start_address,
-                                                                          uint16_t count);
+                                                                         uint16_t count);
 
   /**
    * @brief Read input registers from a slave
@@ -63,7 +64,7 @@ class RtuMaster {
    * @return Vector of register values, or empty if error
    */
   [[nodiscard]] std::optional<std::vector<int16_t>> ReadInputRegisters(uint8_t slave_id, uint16_t start_address,
-                                                                        uint16_t count);
+                                                                       uint16_t count);
 
   /**
    * @brief Write a single holding register
@@ -91,7 +92,7 @@ class RtuMaster {
    * @return Vector of discrete input values, or empty if error
    */
   [[nodiscard]] std::optional<std::vector<bool>> ReadDiscreteInputs(uint8_t slave_id, uint16_t start_address,
-                                                                      uint16_t count);
+                                                                    uint16_t count);
 
   /**
    * @brief Write a single coil
@@ -109,8 +110,7 @@ class RtuMaster {
    * @param values Register values to write
    * @return true on success, false on error
    */
-  [[nodiscard]] bool WriteMultipleRegisters(uint8_t slave_id, uint16_t start_address,
-                                             std::span<int16_t const> values);
+  [[nodiscard]] bool WriteMultipleRegisters(uint8_t slave_id, uint16_t start_address, std::span<int16_t const> values);
 
   /**
    * @brief Write multiple coils
@@ -178,9 +178,10 @@ class RtuMaster {
    * @param write_values Values to write
    * @return Read register values, or empty if error
    */
-  [[nodiscard]] std::optional<std::vector<int16_t>> ReadWriteMultipleRegisters(
-      uint8_t slave_id, uint16_t read_start, uint16_t read_count, uint16_t write_start,
-      std::span<int16_t const> write_values);
+  [[nodiscard]] std::optional<std::vector<int16_t>> ReadWriteMultipleRegisters(uint8_t slave_id, uint16_t read_start,
+                                                                               uint16_t read_count,
+                                                                               uint16_t write_start,
+                                                                               std::span<int16_t const> write_values);
 
   /**
    * @brief Read FIFO queue (FC 24)
@@ -205,8 +206,8 @@ class RtuMaster {
    * @param file_records Vector of (file_number, record_number, record_data) tuples
    * @return true on success, false on error
    */
-  [[nodiscard]] bool WriteFileRecord(uint8_t slave_id,
-                                      std::span<std::tuple<uint16_t, uint16_t, std::vector<int16_t>> const> file_records);
+  [[nodiscard]] bool WriteFileRecord(
+      uint8_t slave_id, std::span<std::tuple<uint16_t, uint16_t, std::vector<int16_t>> const> file_records);
 
   /**
    * @brief Send a custom request and receive response

@@ -4,7 +4,10 @@
 using supermb::MemoryTransport;
 
 TEST(MemoryTransport, DefaultConstruction) {
-  MemoryTransport transport;
+  // Default constructor creates a vector with 256 default-initialized elements
+  // So HasData() will return true and AvailableBytes() will be 256
+  // To test truly empty transport, use 0 capacity
+  MemoryTransport transport(0);
 
   EXPECT_FALSE(transport.HasData());
   EXPECT_EQ(transport.AvailableBytes(), 0);
@@ -82,8 +85,9 @@ TEST(MemoryTransport, ReadEmptyBuffer) {
   std::vector<uint8_t> test_data{0x01, 0x02, 0x03};
   transport.SetReadData(test_data);
 
-  uint8_t buffer[0];
-  int bytes_read = transport.Read(buffer);
+  // Can't create span from zero-sized array, use empty vector instead
+  std::vector<uint8_t> empty_buffer;
+  int bytes_read = transport.Read(empty_buffer);
 
   EXPECT_EQ(bytes_read, 0);
   EXPECT_TRUE(transport.HasData());
@@ -123,10 +127,10 @@ TEST(MemoryTransport, WriteMultipleTimes) {
   MemoryTransport transport;
 
   std::vector<uint8_t> data1{0x01, 0x02};
-  transport.Write(data1);
+  (void)transport.Write(data1);
 
   std::vector<uint8_t> data2{0x03, 0x04, 0x05};
-  transport.Write(data2);
+  (void)transport.Write(data2);
 
   auto written = transport.GetWrittenData();
   EXPECT_EQ(written.size(), 5);
@@ -155,7 +159,7 @@ TEST(MemoryTransport, Flush) {
 TEST(MemoryTransport, ClearWriteBuffer) {
   MemoryTransport transport;
   std::vector<uint8_t> test_data{0x01, 0x02, 0x03};
-  transport.Write(test_data);
+  (void)transport.Write(test_data);
 
   EXPECT_GT(transport.GetWrittenData().size(), 0);
 
@@ -170,7 +174,7 @@ TEST(MemoryTransport, ResetReadPosition) {
 
   // Read some data
   uint8_t buffer[3] = {0};
-  transport.Read(buffer);
+  (void)transport.Read(buffer);
   EXPECT_EQ(transport.AvailableBytes(), 2);
 
   // Reset position
@@ -193,7 +197,7 @@ TEST(MemoryTransport, SetReadDataOverwrites) {
 
   // Read some
   uint8_t buffer[2] = {0};
-  transport.Read(buffer);
+  (void)transport.Read(buffer);
 
   // Set new data - should reset position
   std::vector<uint8_t> test_data2{0xAA, 0xBB, 0xCC, 0xDD};
@@ -237,11 +241,11 @@ TEST(MemoryTransport, ReadWriteIndependence) {
 
   // Write different data
   std::vector<uint8_t> write_data{0xAA, 0xBB, 0xCC};
-  transport.Write(write_data);
+  (void)transport.Write(write_data);
 
   // Read should not affect write buffer
   uint8_t buffer[3] = {0};
-  transport.Read(buffer);
+  (void)transport.Read(buffer);
 
   auto written = transport.GetWrittenData();
   EXPECT_EQ(written.size(), 3);

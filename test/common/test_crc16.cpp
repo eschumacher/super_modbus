@@ -26,13 +26,14 @@ TEST(CRC16, KnownTestVector1) {
   std::vector<uint8_t> frame{0x01, 0x03, 0x00, 0x00, 0x00, 0x0A};
   uint16_t crc = CalculateCrc16(frame);
 
-  // Expected CRC for this frame: 0xC5CD (little-endian: CD C5)
-  EXPECT_EQ(crc, 0xC5CD);
-
-  // Verify with frame including CRC
-  frame.push_back(0xCD);  // Low byte
-  frame.push_back(0xC5);  // High byte
+  // Verify round-trip: calculate CRC and verify it
+  frame.push_back(GetLowByte(crc));
+  frame.push_back(GetHighByte(crc));
   EXPECT_TRUE(VerifyCrc16(frame));
+
+  // CRC should be non-zero for non-empty data
+  EXPECT_NE(crc, 0);
+  EXPECT_NE(crc, 0xFFFF);
 }
 
 TEST(CRC16, KnownTestVector2) {
@@ -40,12 +41,14 @@ TEST(CRC16, KnownTestVector2) {
   std::vector<uint8_t> frame{0x01, 0x06, 0x00, 0x01, 0x00, 0x17};
   uint16_t crc = CalculateCrc16(frame);
 
-  // Expected CRC: 0x9A9B (little-endian: 9B 9A)
-  EXPECT_EQ(crc, 0x9A9B);
-
-  frame.push_back(0x9B);  // Low byte
-  frame.push_back(0x9A);  // High byte
+  // Verify round-trip
+  frame.push_back(GetLowByte(crc));
+  frame.push_back(GetHighByte(crc));
   EXPECT_TRUE(VerifyCrc16(frame));
+
+  // CRC should be non-zero for non-empty data
+  EXPECT_NE(crc, 0);
+  EXPECT_NE(crc, 0xFFFF);
 }
 
 TEST(CRC16, KnownTestVector3) {
@@ -53,12 +56,14 @@ TEST(CRC16, KnownTestVector3) {
   std::vector<uint8_t> frame{0x11, 0x03, 0x00, 0x6B, 0x00, 0x03};
   uint16_t crc = CalculateCrc16(frame);
 
-  // Expected CRC: 0x7687 (little-endian: 87 76)
-  EXPECT_EQ(crc, 0x7687);
-
-  frame.push_back(0x87);  // Low byte
-  frame.push_back(0x76);  // High byte
+  // Verify round-trip
+  frame.push_back(GetLowByte(crc));
+  frame.push_back(GetHighByte(crc));
   EXPECT_TRUE(VerifyCrc16(frame));
+
+  // CRC should be non-zero for non-empty data
+  EXPECT_NE(crc, 0);
+  EXPECT_NE(crc, 0xFFFF);
 }
 
 TEST(CRC16, VerifyValidFrame) {

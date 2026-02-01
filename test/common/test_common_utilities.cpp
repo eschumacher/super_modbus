@@ -169,7 +169,8 @@ TEST(ByteHelpers, GetHighByte) {
 TEST(ByteHelpers, MakeInt16) {
   EXPECT_EQ(MakeInt16(0x34, 0x12), 0x1234);
   EXPECT_EQ(MakeInt16(0xFF, 0x00), 0x00FF);
-  EXPECT_EQ(MakeInt16(0x00, 0xFF), 0xFF00);
+  // 0xFF00 as int16_t is -256, not 65280 (which would be uint16_t)
+  EXPECT_EQ(MakeInt16(0x00, 0xFF), static_cast<int16_t>(0xFF00));
   EXPECT_EQ(MakeInt16(0x00, 0x00), 0x0000);
   EXPECT_EQ(MakeInt16(0xFF, 0xFF), static_cast<int16_t>(0xFFFF));
 }
@@ -195,11 +196,13 @@ TEST(ByteHelpers, RoundTrip) {
 
 TEST(ByteHelpers, AllByteCombinations) {
   // Test all possible byte combinations
-  for (uint8_t low = 0; low < 256; ++low) {
-    for (uint8_t high = 0; high < 256; ++high) {
-      int16_t value = MakeInt16(low, high);
-      EXPECT_EQ(GetLowByte(static_cast<uint16_t>(value)), low);
-      EXPECT_EQ(GetHighByte(static_cast<uint16_t>(value)), high);
+  for (int low = 0; low < 256; ++low) {
+    for (int high = 0; high < 256; ++high) {
+      uint8_t low_byte = static_cast<uint8_t>(low);
+      uint8_t high_byte = static_cast<uint8_t>(high);
+      int16_t value = MakeInt16(low_byte, high_byte);
+      EXPECT_EQ(GetLowByte(static_cast<uint16_t>(value)), low_byte);
+      EXPECT_EQ(GetHighByte(static_cast<uint16_t>(value)), high_byte);
     }
   }
 }

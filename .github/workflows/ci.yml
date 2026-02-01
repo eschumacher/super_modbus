@@ -34,7 +34,8 @@ jobs:
       run: |
         FAILED_FILES=()
         while IFS= read -r file; do
-          if ! clang-format --dry-run --Werror "$file" 2>&1; then
+          # Use --style=file to explicitly use .clang-format in current directory
+          if ! clang-format --style=file --dry-run --Werror "$file" 2>&1; then
             FAILED_FILES+=("$file")
           fi
         done < <(find . -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) \

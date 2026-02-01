@@ -69,8 +69,10 @@ TEST(Integration, MasterSlaveWriteThenRead) {
   auto data = read_resp.GetData();
   // Read register responses include byte_count (1 byte) + register data (1 register * 2 bytes = 2 bytes)
   ASSERT_EQ(data.size(), 3);
-  // Skip byte_count byte, then read register value (low byte first, then high byte)
-  int16_t value = MakeInt16(data[1], data[2]);
+  // Skip byte_count byte, then read register value
+  // ProcessReadRegisters writes: high byte first, then low byte (big-endian)
+  // MakeInt16 takes: (low_byte, high_byte), so we need data[2] (low) then data[1] (high)
+  int16_t value = MakeInt16(data[2], data[1]);
   EXPECT_EQ(value, 0x1234);
 }
 
@@ -94,8 +96,10 @@ TEST(Integration, MultipleWriteOperations) {
   auto data = read_resp.GetData();
   // Read register responses include byte_count (1 byte) + register data (1 register * 2 bytes = 2 bytes)
   ASSERT_EQ(data.size(), 3);
-  // Skip byte_count byte, then read register value (low byte first, then high byte)
-  EXPECT_EQ(MakeInt16(data[1], data[2]), 100);
+  // Skip byte_count byte, then read register value
+  // ProcessReadRegisters writes: high byte first, then low byte (big-endian)
+  // MakeInt16 takes: (low_byte, high_byte), so we need data[2] (low) then data[1] (high)
+  EXPECT_EQ(MakeInt16(data[2], data[1]), 100);
 }
 
 TEST(Integration, CoilAndRegisterMixed) {
@@ -129,8 +133,10 @@ TEST(Integration, CoilAndRegisterMixed) {
   RtuResponse reg_read_resp = slave.Process(reg_read);
   EXPECT_EQ(reg_read_resp.GetExceptionCode(), ExceptionCode::kAcknowledge);
   auto reg_data = reg_read_resp.GetData();
-  // Skip byte_count byte, then read register value (low byte first, then high byte)
-  int16_t reg_value = MakeInt16(reg_data[1], reg_data[2]);
+  // Skip byte_count byte, then read register value
+  // ProcessReadRegisters writes: high byte first, then low byte (big-endian)
+  // MakeInt16 takes: (low_byte, high_byte), so we need reg_data[2] (low) then reg_data[1] (high)
+  int16_t reg_value = MakeInt16(reg_data[2], reg_data[1]);
   EXPECT_EQ(reg_value, 0x5678);
 }
 
@@ -179,8 +185,10 @@ TEST(Integration, MultipleSlaves) {
   read1.SetAddressSpan({0, 1});
   RtuResponse read_resp1 = slave1.Process(read1);
   auto data1 = read_resp1.GetData();
-  // Skip byte_count byte, then read register value (low byte first, then high byte)
-  int16_t value1 = MakeInt16(data1[1], data1[2]);
+  // Skip byte_count byte, then read register value
+  // ProcessReadRegisters writes: high byte first, then low byte (big-endian)
+  // MakeInt16 takes: (low_byte, high_byte), so we need data1[2] (low) then data1[1] (high)
+  int16_t value1 = MakeInt16(data1[2], data1[1]);
   EXPECT_EQ(value1, 0x1111);
 
   // Read from slave 2
@@ -188,7 +196,9 @@ TEST(Integration, MultipleSlaves) {
   read2.SetAddressSpan({0, 1});
   RtuResponse read_resp2 = slave2.Process(read2);
   auto data2 = read_resp2.GetData();
-  // Skip byte_count byte, then read register value (low byte first, then high byte)
-  int16_t value2 = MakeInt16(data2[1], data2[2]);
+  // Skip byte_count byte, then read register value
+  // ProcessReadRegisters writes: high byte first, then low byte (big-endian)
+  // MakeInt16 takes: (low_byte, high_byte), so we need data2[2] (low) then data2[1] (high)
+  int16_t value2 = MakeInt16(data2[2], data2[1]);
   EXPECT_EQ(value2, 0x2222);
 }

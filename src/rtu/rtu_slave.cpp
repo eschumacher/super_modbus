@@ -524,7 +524,7 @@ void RtuSlave::ProcessReadFileRecord(RtuRequest const &request, RtuResponse &res
   }
 
   uint8_t byte_count = data[0];
-  if (byte_count == 0 || data.size() < 1 + byte_count) {
+  if (byte_count == 0 || data.size() < static_cast<size_t>(1 + byte_count)) {
     response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
     return;
   }
@@ -598,7 +598,7 @@ void RtuSlave::ProcessWriteFileRecord(RtuRequest const &request, RtuResponse &re
   }
 
   uint8_t byte_count = data[0];
-  if (byte_count == 0 || data.size() < 1 + byte_count) {
+  if (byte_count == 0 || data.size() < static_cast<size_t>(1 + byte_count)) {
     response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
     return;
   }

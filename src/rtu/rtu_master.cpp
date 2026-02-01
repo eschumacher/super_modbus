@@ -37,7 +37,7 @@ std::optional<std::vector<int16_t>> RtuMaster::ReadHoldingRegisters(uint8_t slav
   }
 
   auto data = response->GetData();
-  if (data.empty() || data.size() < 1 + count * 2) {
+  if (data.empty() || data.size() < static_cast<size_t>(1 + count * 2)) {
     return {};
   }
 
@@ -77,7 +77,7 @@ std::optional<std::vector<int16_t>> RtuMaster::ReadInputRegisters(uint8_t slave_
   }
 
   auto data = response->GetData();
-  if (data.empty() || data.size() < 1 + count * 2) {
+  if (data.empty() || data.size() < static_cast<size_t>(1 + count * 2)) {
     return {};
   }
 
@@ -380,7 +380,7 @@ std::optional<std::vector<int16_t>> RtuMaster::ReadFIFOQueue(uint8_t slave_id, u
   // Slave sends [high_byte_count, low_byte_count, high_fifo_count, low_fifo_count]
   // MakeInt16 takes (low_byte, high_byte), so we need MakeInt16(low_fifo_count, high_fifo_count)
   uint16_t fifo_count = MakeInt16(data[3], data[2]);
-  if (data.size() < 4 + fifo_count * 2) {
+  if (data.size() < static_cast<size_t>(4 + fifo_count * 2)) {
     return {};
   }
   std::vector<int16_t> fifo_data;
@@ -413,7 +413,7 @@ std::optional<std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int1
   }
 
   uint8_t response_length = data[0];
-  if (data.size() < 1 + response_length) {
+  if (data.size() < static_cast<size_t>(1 + response_length)) {
     return {};
   }
 

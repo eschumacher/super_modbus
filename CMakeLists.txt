@@ -78,6 +78,7 @@ endif()
 # Testing and Coverage
 ###################################
 option(BUILD_TESTS "Build tests" ON)
+option(COVERAGE "Enable coverage reporting" OFF)
 if (BUILD_TESTS)
     if (NOT CMAKE_BUILD_TYPE STREQUAL Debug)
         message(WARNING "Must set CMAKE_BUILD_TYPE to Debug in order to build tests! Tests will not be built.")
@@ -85,8 +86,11 @@ if (BUILD_TESTS)
         enable_testing()
         add_subdirectory(test)
 
-        target_compile_options(${PROJECT_NAME}-lib PRIVATE --coverage -O0)
-        target_link_libraries(${PROJECT_NAME}-lib PRIVATE --coverage)
+        # Only add coverage flags when coverage is explicitly enabled
+        if (COVERAGE)
+            target_compile_options(${PROJECT_NAME}-lib PRIVATE --coverage -O0)
+            target_link_libraries(${PROJECT_NAME}-lib PRIVATE --coverage)
+        endif()
     endif()
 endif()
 

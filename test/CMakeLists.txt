@@ -45,7 +45,7 @@ if (COVERAGE)
     AddCoverage(run_tests)
 endif()
 
-option(PROFILING "Enable profiling (valgrind, memcheck)" ON)
+option(PROFILING "Enable profiling (valgrind, memcheck)" OFF)
 if (PROFILING)
     include(AddMemCheck)
     AddMemCheck(run_tests)

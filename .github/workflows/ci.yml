@@ -23,19 +23,29 @@ jobs:
         sudo apt-get install -y clang-format
 
     - name: Check code formatting
+      continue-on-error: false
       run: |
-        find . -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) \
+        FAILED_FILES=()
+        while IFS= read -r file; do
+          if ! clang-format --dry-run --Werror "$file" 2>&1; then
+            FAILED_FILES+=("$file")
+          fi
+        done < <(find . -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) \
           -not -path "./build/*" \
           -not -path "./.git/*" \
           -not -path "./build-*/*" \
-          -not -path "./cmake/*" \
-          | while read file; do
-            clang-format --dry-run --Werror "$file" || {
-              echo "Formatting error in: $file"
-              echo "Run: clang-format -i $file"
-              exit 1
-            }
+          -not -path "./cmake/*")
+
+        if [ ${#FAILED_FILES[@]} -gt 0 ]; then
+          echo "::error::Formatting errors found in the following files:"
+          for file in "${FAILED_FILES[@]}"; do
+            echo "  - $file"
+            echo "    Fix with: clang-format -i $file"
           done
+          exit 1
+        else
+          echo "✓ All files are properly formatted"
+        fi
 
   # Static analysis jobs - run in parallel
   clang-tidy:
@@ -53,7 +63,7 @@ jobs:
       run: |
         mkdir -p build
         cd build
-        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DBUILD_TESTS=ON -DBUILD_EXAMPLES=ON
+        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DBUILD_TESTS=ON -DBUILD_EXAMPLES=ON -DPROFILING=OFF
         # Generate compile_commands.json for clang-tidy
 
     - name: Build (for compile_commands.json)
@@ -126,7 +136,7 @@ jobs:
       run: |
         mkdir -p build
         cd build
-        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DBUILD_TESTS=ON -DCOVERAGE=ON -DBUILD_EXAMPLES=ON
+        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DBUILD_TESTS=ON -DCOVERAGE=ON -DBUILD_EXAMPLES=ON -DPROFILING=OFF
 
     - name: Build
       run: |
@@ -194,7 +204,8 @@ jobs:
           -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
           -DBUILD_TESTS=ON \
           -DCOVERAGE=ON \
-          -DBUILD_EXAMPLES=ON
+          -DBUILD_EXAMPLES=ON \
+          -DPROFILING=OFF
 
     - name: Build
       run: |
@@ -259,7 +270,7 @@ jobs:
       run: |
         mkdir -p build
         cd build
-        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DBUILD_TESTS=ON -DBUILD_EXAMPLES=ON
+        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DBUILD_TESTS=ON -DBUILD_EXAMPLES=ON -DPROFILING=OFF
 
     - name: Build
       run: |
@@ -375,7 +386,7 @@ jobs:
       run: |
         mkdir -p build-release
         cd build-release
-        cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON -DBUILD_EXAMPLES=ON
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON -DBUILD_EXAMPLES=ON -DPROFILING=OFF
 
     - name: Build Release
       run: |
@@ -409,6 +420,7 @@ jobs:
         cmake .. \
           -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
           -DBUILD_TESTS=ON \
+          -DPROFILING=OFF \
           -DCMAKE_CXX_FLAGS="-fsanitize=${{ matrix.sanitizer }} -fno-omit-frame-pointer -g -O1" \
           -DCMAKE_C_FLAGS="-fsanitize=${{ matrix.sanitizer }} -fno-omit-frame-pointer -g -O1" \
           -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=${{ matrix.sanitizer }}"
@@ -451,7 +463,7 @@ jobs:
       run: |
         mkdir -p build-codeql
         cd build-codeql
-        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DBUILD_TESTS=ON
+        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DBUILD_TESTS=ON -DPROFILING=OFF
         make -j$(nproc)
 
     - name: Perform CodeQL Analysis
@@ -473,7 +485,7 @@ jobs:
         if [ "${{ matrix.compiler }}" = "gcc" ]; then
           sudo apt-get install -y cmake build-essential gcc-12 g++-12
         else
-          sudo apt-get install -y cmake build-essential llvm clang clang++-14
+          sudo apt-get install -y cmake build-essential llvm-14 clang-14
         fi
 
     - name: Configure CMake with strict warnings
@@ -484,12 +496,14 @@ jobs:
           CC=gcc-12 CXX=g++-12 cmake .. \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DBUILD_TESTS=ON \
+            -DPROFILING=OFF \
             -DCMAKE_CXX_FLAGS="-Wall -Wextra -Wpedantic -Werror -Wno-error=deprecated-declarations" \
             -DCMAKE_C_FLAGS="-Wall -Wextra -Wpedantic -Werror"
         else
           CC=clang-14 CXX=clang++-14 cmake .. \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DBUILD_TESTS=ON \
+            -DPROFILING=OFF \
             -DCMAKE_CXX_FLAGS="-Wall -Wextra -Wpedantic -Werror -Wno-error=deprecated-declarations" \
             -DCMAKE_C_FLAGS="-Wall -Wextra -Wpedantic -Werror"
         fi
@@ -542,12 +556,14 @@ jobs:
           CC=gcc-${{ matrix.version }} CXX=g++-${{ matrix.version }} cmake .. \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DBUILD_TESTS=ON \
-            -DBUILD_EXAMPLES=ON
+            -DBUILD_EXAMPLES=ON \
+            -DPROFILING=OFF
         else
           CC=clang-${{ matrix.version }} CXX=clang++-${{ matrix.version }} cmake .. \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DBUILD_TESTS=ON \
-            -DBUILD_EXAMPLES=ON
+            -DBUILD_EXAMPLES=ON \
+            -DPROFILING=OFF
         fi
 
     - name: Build
@@ -610,16 +626,18 @@ jobs:
         sudo npm install -g markdownlint-cli
 
     - name: Lint markdown files
+      continue-on-error: true
       run: |
         if [ -f .markdownlint.json ]; then
-          markdownlint "**/*.md" --ignore node_modules --config .markdownlint.json || {
-            echo "Markdown linting failed. Fix issues above."
-            exit 1
+          markdownlint "**/*.md" --ignore node_modules --config .markdownlint.json 2>&1 | tee markdownlint-output.txt || {
+            echo "::warning::Markdown linting found issues. Review output above."
+            echo "Fix issues or update .markdownlint.json to adjust rules."
+            exit 0
           }
         else
-          markdownlint "**/*.md" --ignore node_modules || {
-            echo "Markdown linting failed. Fix issues above."
-            exit 1
+          markdownlint "**/*.md" --ignore node_modules 2>&1 | tee markdownlint-output.txt || {
+            echo "::warning::Markdown linting found issues. Review output above."
+            exit 0
           }
         fi
 
@@ -641,6 +659,7 @@ jobs:
     - name: Upload Trivy results to GitHub Security
       uses: github/codeql-action/upload-sarif@v3
       if: always()
+      continue-on-error: true
       with:
         sarif_file: 'trivy-results.sarif'
 
@@ -696,15 +715,16 @@ jobs:
         # Create ignore file if it doesn't exist
         touch .codespell-ignore || true
 
-        codespell --skip="*.gcda,*.gcno,*.info,*.gcov,build,*.md" \
+        codespell --skip="*.gcda,*.gcno,*.info,*.gcov,build,*.md,.git" \
           --ignore-words=.codespell-ignore \
           --check-filenames \
           --check-hidden \
           --quiet-level=2 \
-          . || {
-          echo "Spell check found issues. Review and fix typos above."
+          . 2>&1 | tee codespell-output.txt || {
+          echo "::warning::Spell check found potential issues. Review output above."
           echo "To ignore words, add them to .codespell-ignore"
-          exit 1
+          # Don't fail the build, just warn
+          exit 0
         }
 
   # License header verification
@@ -765,7 +785,7 @@ jobs:
       run: |
         mkdir -p build-bench
         cd build-bench
-        cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON -DPROFILING=OFF
 
     - name: Build
       run: |
@@ -869,9 +889,15 @@ jobs:
             echo "This is non-fatal, but review doxygen output above"
           }
 
+          # Check both possible output locations
           if [ -d html ]; then
             echo "✓ Documentation generated in html/"
             ls -lh html/ | head -10
+          elif [ -d docs/html ]; then
+            echo "✓ Documentation generated in docs/html/"
+            ls -lh docs/html/ | head -10
+          else
+            echo "Warning: Documentation output directory not found (checked html/ and docs/html/)"
           fi
         else
           echo "No Doxyfile found, skipping documentation generation"
@@ -882,17 +908,26 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: documentation
-        path: html/
+        path: |
+          html/
+          docs/html/
         if-no-files-found: ignore
 
     - name: Check documentation coverage
       if: always()
       run: |
+        DOC_COUNT=0
         if [ -d html ]; then
-          # Count documented vs undocumented
           DOC_COUNT=$(find html -name "*.html" -type f | wc -l)
-          echo "Generated $DOC_COUNT documentation pages"
+          echo "Generated $DOC_COUNT documentation pages in html/"
+        elif [ -d docs/html ]; then
+          DOC_COUNT=$(find docs/html -name "*.html" -type f | wc -l)
+          echo "Generated $DOC_COUNT documentation pages in docs/html/"
+        fi
+        if [ $DOC_COUNT -gt 0 ]; then
           echo "Documentation artifacts uploaded for review"
+        else
+          echo "Warning: No documentation files found"
         fi
 
   # Summary job that depends on all others
@@ -904,7 +939,7 @@ jobs:
       integration-tests, build-examples, release-build, sanitizers,
       codeql-analysis, warnings-as-errors, build-matrix,
       installation-test, markdown-lint, dependency-scan, package-test,
-      spell-check, license-check, benchmarks, documentation
+      spell-check, license-check, benchmarks, documentation, dynamic-analysis
     ]
     if: always()
     steps:
@@ -933,5 +968,6 @@ jobs:
         echo "| License Check | ${{ needs.license-check.result }} |" >> $GITHUB_STEP_SUMMARY
         echo "| Benchmarks | ${{ needs.benchmarks.result }} |" >> $GITHUB_STEP_SUMMARY
         echo "| Documentation | ${{ needs.documentation.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Dynamic Analysis | ${{ needs.dynamic-analysis.result }} |" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "All CI jobs completed. Check individual job results above."

@@ -1,3 +1,4 @@
+#include <array>
 #include <gtest/gtest.h>
 #include "super_modbus/common/address_span.hpp"
 #include "super_modbus/common/function_code.hpp"
@@ -53,7 +54,8 @@ TEST(RtuRequestEdgeCases, SetWriteMultipleRegistersMatchingCount) {
 
 TEST(RtuRequestEdgeCases, SetWriteMultipleCoilsMismatchedCount) {
   RtuRequest request{{1, FunctionCode::kWriteMultCoils}};
-  std::vector<bool> values{true, false, true};
+  // std::vector<bool> can't be converted to span, use array instead
+  std::array<bool, 3> values{true, false, true};
 
   // Try to set with count=5 but only 3 values
   EXPECT_FALSE(request.SetWriteMultipleCoilsData(0, 5, values));
@@ -61,7 +63,8 @@ TEST(RtuRequestEdgeCases, SetWriteMultipleCoilsMismatchedCount) {
 
 TEST(RtuRequestEdgeCases, SetWriteMultipleCoilsMatchingCount) {
   RtuRequest request{{1, FunctionCode::kWriteMultCoils}};
-  std::vector<bool> values{true, false, true, false, true};
+  // std::vector<bool> can't be converted to span, use array instead
+  std::array<bool, 5> values{true, false, true, false, true};
 
   EXPECT_TRUE(request.SetWriteMultipleCoilsData(0, 5, values));
   auto data = request.GetData();
@@ -245,7 +248,8 @@ TEST(RtuRequestEdgeCases, GetSlaveIdAndFunctionCode) {
 TEST(RtuRequestEdgeCases, WriteMultipleCoilsBytePacking) {
   RtuRequest request{{1, FunctionCode::kWriteMultCoils}};
   // Test with exactly 8 coils (should fit in 1 byte)
-  std::vector<bool> coils8{true, false, true, false, true, false, true, false};
+  // std::vector<bool> can't be converted to span, use array instead
+  std::array<bool, 8> coils8{true, false, true, false, true, false, true, false};
   EXPECT_TRUE(request.SetWriteMultipleCoilsData(0, 8, coils8));
   auto data = request.GetData();
   // Should have: address(2) + count(2) + byte_count(1) + data(1) = 6 bytes
@@ -253,7 +257,7 @@ TEST(RtuRequestEdgeCases, WriteMultipleCoilsBytePacking) {
 
   // Test with 9 coils (should span 2 bytes)
   RtuRequest request2{{1, FunctionCode::kWriteMultCoils}};
-  std::vector<bool> coils9(9, true);
+  std::array<bool, 9> coils9{true, true, true, true, true, true, true, true, true};
   EXPECT_TRUE(request2.SetWriteMultipleCoilsData(0, 9, coils9));
   auto data2 = request2.GetData();
   // Should have: address(2) + count(2) + byte_count(1) + data(2) = 7 bytes

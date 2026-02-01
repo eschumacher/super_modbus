@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "super_modbus/common/address_span.hpp"
+#include "super_modbus/common/byte_helpers.hpp"
 #include "super_modbus/common/crc16.hpp"
 #include "super_modbus/common/exception_code.hpp"
 #include "super_modbus/common/function_code.hpp"
@@ -10,6 +11,8 @@
 using supermb::AddressSpan;
 using supermb::ExceptionCode;
 using supermb::FunctionCode;
+using supermb::GetHighByte;
+using supermb::GetLowByte;
 using supermb::RtuFrame;
 using supermb::RtuRequest;
 using supermb::RtuResponse;

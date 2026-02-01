@@ -68,6 +68,33 @@ TEST(RTUFrameEdgeCases, DecodeRequestWriteSingleRegWithInsufficientData) {
   EXPECT_EQ(decoded->GetData().size(), 1);
 }
 
+TEST(RTUFrameEdgeCases, DecodeRequestWriteSingleCoilWithInsufficientData) {
+  // Write single coil with less than 4 bytes
+  std::vector<uint8_t> frame{0x01, 0x05, 0x00};  // Only 1 byte of data
+  uint16_t crc = supermb::CalculateCrc16(frame);
+  frame.push_back(supermb::GetLowByte(crc));
+  frame.push_back(supermb::GetHighByte(crc));
+
+  auto decoded = RtuFrame::DecodeRequest(frame);
+  ASSERT_TRUE(decoded.has_value());
+  // Should fall back to raw data
+  EXPECT_EQ(decoded->GetData().size(), 1);
+}
+
+TEST(RTUFrameEdgeCases, DecodeRequestOtherFunctionCodeWithData) {
+  // Function code that uses SetRawData (e.g., WriteMultipleRegisters)
+  std::vector<uint8_t> frame{0x01, 0x10, 0x00, 0x00, 0x00, 0x02, 0x04, 0x12, 0x34, 0x56, 0x78};
+  uint16_t crc = supermb::CalculateCrc16(frame);
+  frame.push_back(supermb::GetLowByte(crc));
+  frame.push_back(supermb::GetHighByte(crc));
+
+  auto decoded = RtuFrame::DecodeRequest(frame);
+  ASSERT_TRUE(decoded.has_value());
+  EXPECT_EQ(decoded->GetFunctionCode(), FunctionCode::kWriteMultRegs);
+  // Should have raw data
+  EXPECT_GT(decoded->GetData().size(), 0);
+}
+
 TEST(RTUFrameEdgeCases, DecodeResponseTooShort) {
   std::vector<uint8_t> frame{0x01};  // Only slave ID
   auto decoded = RtuFrame::DecodeResponse(frame);

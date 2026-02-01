@@ -26,6 +26,8 @@ add_executable(run_tests
     rtu/test_event_log.cpp
     rtu/test_rtu_frame_edge_cases.cpp
     rtu/test_rtu_request_edge_cases.cpp
+    rtu/test_rtu_master_coverage.cpp
+    rtu/test_rtu_slave_coverage.cpp
     common/test_common_utilities.cpp
     common/test_crc16.cpp
     transport/test_memory_transport.cpp

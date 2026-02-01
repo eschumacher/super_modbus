@@ -544,29 +544,47 @@ jobs:
 
   # Warnings as errors - strict compilation
   warnings-as-errors:
-    name: Warnings as Errors
+    name: Warnings as Errors (${{ matrix.compiler }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        compiler: [gcc]  # clang skipped due to GCC 14 stdlib compatibility issues
+        compiler: [gcc, clang]
     steps:
     - uses: actions/checkout@v4
 
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake build-essential gcc-12 g++-12
+        if [ "${{ matrix.compiler }}" = "gcc" ]; then
+          sudo apt-get install -y cmake build-essential gcc-12 g++-12
+        else
+          # Install clang with libc++ (required to avoid GCC libstdc++ compatibility issues)
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential llvm clang libc++-dev libc++abi-dev
+        fi
 
     - name: Configure CMake with strict warnings
       run: |
         mkdir -p build-warnings
         cd build-warnings
-        CC=gcc-12 CXX=g++-12 cmake .. \
-          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-          -DBUILD_TESTS=ON \
-          -DPROFILING=OFF \
-          -DCMAKE_CXX_FLAGS="-Wall -Wextra -Wpedantic -Werror -Wno-error=deprecated-declarations -Wno-error=overflow" \
-          -DCMAKE_C_FLAGS="-Wall -Wextra -Wpedantic -Werror"
+        if [ "${{ matrix.compiler }}" = "gcc" ]; then
+          CC=gcc-12 CXX=g++-12 cmake .. \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DBUILD_TESTS=ON \
+            -DPROFILING=OFF \
+            -DCMAKE_CXX_FLAGS="-Wall -Wextra -Wpedantic -Werror -Wno-error=deprecated-declarations -Wno-error=overflow" \
+            -DCMAKE_C_FLAGS="-Wall -Wextra -Wpedantic -Werror"
+        else
+          # Force libc++ for clang to avoid GCC libstdc++ compatibility issues
+          CC=clang CXX=clang++ cmake .. \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DBUILD_TESTS=ON \
+            -DPROFILING=OFF \
+            -DCMAKE_CXX_FLAGS="-Wall -Wextra -Wpedantic -Werror -stdlib=libc++" \
+            -DCMAKE_C_FLAGS="-Wall -Wextra -Wpedantic -Werror" \
+            -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++ -lc++abi" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-stdlib=libc++ -lc++abi"
+        fi
 
     - name: Build (warnings as errors)
       run: |

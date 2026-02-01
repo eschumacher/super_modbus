@@ -24,8 +24,11 @@ while read local_ref local_sha remote_ref remote_sha; do
     # Normal push: diff between remote and local (commits being pushed)
     changed_files=$(git diff --name-only --diff-filter=ACM "$remote_sha" "$local_sha" 2>/dev/null | grep -E '\.(cpp|hpp|h)$' || true)
   else
-    # New branch: all files in the commits being pushed
-    changed_files=$(git diff --name-only --diff-filter=ACM --root "$local_sha" 2>/dev/null | grep -E '\.(cpp|hpp|h)$' || true)
+    # New branch: get all files in the commits being pushed
+    # Use git diff-tree with --root to get all files from the initial commit
+    # Or use empty tree hash (4b825dc642cb6eb9a060e54bf8d69288fbee4904) as base
+    changed_files=$(git diff-tree --name-only --diff-filter=ACM -r --root "$local_sha" 2>/dev/null | grep -E '\.(cpp|hpp|h)$' || \
+      git diff --name-only --diff-filter=ACM 4b825dc642cb6eb9a060e54bf8d69288fbee4904 "$local_sha" 2>/dev/null | grep -E '\.(cpp|hpp|h)$' || true)
   fi
 
   if [ -n "$changed_files" ]; then

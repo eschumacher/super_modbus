@@ -2,7 +2,6 @@
 #include <array>
 #include <cassert>
 #include <iostream>
-#include <ranges>
 #include <span>
 #include <tuple>
 #include <vector>
@@ -26,10 +25,10 @@ static constexpr uint8_t kMaxFileRecords{255};
 
 // Helper function to check if function code is in valid functions array
 static constexpr bool IsAddressSpanValidFunction(FunctionCode function_code) {
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay,hicpp-no-array-decay)
-  // std::ranges::any_of correctly handles std::array without decay
-  return std::ranges::any_of(kAddressSpanValidFunctions,
-                             [function_code](FunctionCode valid_code) { return valid_code == function_code; });
+  // Use std::any_of with iterators for compiler compatibility (works with all C++11+ compilers)
+  // std::ranges::any_of is not available in libc++ for clang-14/15
+  return std::any_of(std::begin(kAddressSpanValidFunctions), std::end(kAddressSpanValidFunctions),
+                     [function_code](FunctionCode valid_code) { return valid_code == function_code; });
 }
 
 std::optional<AddressSpan> RtuRequest::GetAddressSpan() const {

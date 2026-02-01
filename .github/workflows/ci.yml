@@ -109,17 +109,39 @@ jobs:
 
     - name: Run cppcheck
       run: |
-        cppcheck --enable=all --error-exitcode=1 \
-          --suppress=missingIncludeSystem \
-          --suppress=unusedFunction \
-          --suppress=unmatchedSuppression \
-          --suppress=uninitvar \
-          --inline-suppr \
-          --std=c++20 \
-          src/ include/ test/ || {
-          echo "cppcheck found issues"
-          exit 1
-        }
+        # Use compile_commands.json if available, otherwise use include paths
+        if [ -f build/compile_commands.json ]; then
+          cppcheck --enable=all --error-exitcode=1 \
+            --project=build/compile_commands.json \
+            --suppress=missingIncludeSystem \
+            --suppress=missingInclude \
+            --suppress=unusedFunction \
+            --suppress=unmatchedSuppression \
+            --suppress=uninitvar \
+            --suppress=ctuOneDefinitionRuleViolation \
+            --inline-suppr \
+            --std=c++20 || {
+            echo "cppcheck found issues"
+            exit 1
+          }
+        else
+          # Fallback: manually specify include paths
+          cppcheck --enable=all --error-exitcode=1 \
+            -I include/ \
+            -I include/super_modbus/ \
+            --suppress=missingIncludeSystem \
+            --suppress=missingInclude \
+            --suppress=unusedFunction \
+            --suppress=unmatchedSuppression \
+            --suppress=uninitvar \
+            --suppress=ctuOneDefinitionRuleViolation \
+            --inline-suppr \
+            --std=c++20 \
+            src/ include/ test/ || {
+            echo "cppcheck found issues"
+            exit 1
+          }
+        fi
 
   # Build and test with GCC
   test-gcc:

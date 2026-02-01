@@ -10,10 +10,31 @@ NC='\033[0m' # No Color
 
 echo "Running pre-push formatting check..."
 
-# Get list of files that will be pushed
-FILES_TO_CHECK=$(git diff --name-only --diff-filter=ACM origin/$(git rev-parse --abbrev-ref HEAD) 2>/dev/null | grep -E '\.(cpp|hpp|h)$' || \
-  git diff --name-only --diff-filter=ACM HEAD@{upstream} 2>/dev/null | grep -E '\.(cpp|hpp|h)$' || \
-  git diff --name-only --diff-filter=ACM HEAD | grep -E '\.(cpp|hpp|h)$')
+# Pre-push hook receives refs via stdin: <local ref> <local sha1> <remote ref> <remote sha1>
+# Collect all files being pushed across all refs
+FILES_TO_CHECK=""
+while read local_ref local_sha remote_ref remote_sha; do
+  # Skip if this is a delete operation (local_sha is all zeros)
+  if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
+    continue
+  fi
+
+  # Get files changed in commits being pushed
+  if [ "$remote_sha" != "0000000000000000000000000000000000000000" ]; then
+    # Normal push: diff between remote and local (commits being pushed)
+    changed_files=$(git diff --name-only --diff-filter=ACM "$remote_sha" "$local_sha" 2>/dev/null | grep -E '\.(cpp|hpp|h)$' || true)
+  else
+    # New branch: all files in the commits being pushed
+    changed_files=$(git diff --name-only --diff-filter=ACM --root "$local_sha" 2>/dev/null | grep -E '\.(cpp|hpp|h)$' || true)
+  fi
+
+  if [ -n "$changed_files" ]; then
+    FILES_TO_CHECK="${FILES_TO_CHECK}${changed_files}"$'\n'
+  fi
+done
+
+# Remove duplicates and empty lines
+FILES_TO_CHECK=$(echo "$FILES_TO_CHECK" | sort -u | grep -v '^$')
 
 if [ -z "$FILES_TO_CHECK" ]; then
   echo -e "${GREEN}No C++ files to check.${NC}"

@@ -16,7 +16,10 @@ jobs:
     - name: Install clang-format
       run: |
         sudo apt-get update
-        sudo apt-get install -y clang-format
+        # Pin to clang-format-14 to match local development environment
+        sudo apt-get install -y clang-format-14
+        # Create symlink to ensure clang-format command works
+        sudo ln -sf /usr/bin/clang-format-14 /usr/bin/clang-format || true
         clang-format --version
 
     - name: Check code formatting

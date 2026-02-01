@@ -403,7 +403,7 @@ sudo usermod -a -G dialout $USER
 
 The project maintains comprehensive test coverage. Coverage reports are generated automatically in CI and can be generated locally:
 
-![Code Coverage Sunburst](https://codecov.io/gh/eschumacher/super_modbus/graphs/sunburst.svg?token=fwNYvudHgZ)
+![Code Coverage Sunburst](https://codecov.io/gh/eschumacher/super_modbus/graphs/sunburst.svg)
 
 ```bash
 cd build

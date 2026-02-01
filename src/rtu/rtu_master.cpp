@@ -20,7 +20,7 @@ using supermb::IsBroadcastableWrite;
 namespace supermb {
 
 std::optional<std::vector<int16_t>> RtuMaster::ReadHoldingRegisters(uint8_t slave_id, uint16_t start_address,
-                                                                     uint16_t count) {
+                                                                    uint16_t count) {
   RtuRequest request({slave_id, FunctionCode::kReadHR});
   AddressSpan span{start_address, count};
   if (!request.SetAddressSpan(span)) {
@@ -37,7 +37,7 @@ std::optional<std::vector<int16_t>> RtuMaster::ReadHoldingRegisters(uint8_t slav
   }
 
   auto data = response->GetData();
-  if (data.empty() || data.size() < 1 + count * 2) {
+  if (data.empty() || data.size() < static_cast<size_t>(1 + count * 2)) {
     return {};
   }
 
@@ -60,7 +60,7 @@ std::optional<std::vector<int16_t>> RtuMaster::ReadHoldingRegisters(uint8_t slav
 }
 
 std::optional<std::vector<int16_t>> RtuMaster::ReadInputRegisters(uint8_t slave_id, uint16_t start_address,
-                                                                    uint16_t count) {
+                                                                  uint16_t count) {
   RtuRequest request({slave_id, FunctionCode::kReadIR});
   AddressSpan span{start_address, count};
   if (!request.SetAddressSpan(span)) {
@@ -77,7 +77,7 @@ std::optional<std::vector<int16_t>> RtuMaster::ReadInputRegisters(uint8_t slave_
   }
 
   auto data = response->GetData();
-  if (data.empty() || data.size() < 1 + count * 2) {
+  if (data.empty() || data.size() < static_cast<size_t>(1 + count * 2)) {
     return {};
   }
 
@@ -152,7 +152,7 @@ std::optional<std::vector<bool>> RtuMaster::ReadCoils(uint8_t slave_id, uint16_t
 }
 
 std::optional<std::vector<bool>> RtuMaster::ReadDiscreteInputs(uint8_t slave_id, uint16_t start_address,
-                                                                 uint16_t count) {
+                                                               uint16_t count) {
   RtuRequest request({slave_id, FunctionCode::kReadDI});
   AddressSpan span{start_address, count};
   if (!request.SetAddressSpan(span)) {
@@ -204,7 +204,7 @@ bool RtuMaster::WriteSingleCoil(uint8_t slave_id, uint16_t address, bool value) 
   return response->GetExceptionCode() == ExceptionCode::kAcknowledge;
 }
 
-bool RtuMaster::WriteMultipleRegisters(uint8_t slave_id, uint16_t start_address, std::span<int16_t const> values) {
+bool RtuMaster::WriteMultipleRegisters(uint8_t slave_id, uint16_t start_address, std::span<const int16_t> values) {
   RtuRequest request({slave_id, FunctionCode::kWriteMultRegs});
   if (!request.SetWriteMultipleRegistersData(start_address, static_cast<uint16_t>(values.size()), values)) {
     return false;
@@ -218,7 +218,7 @@ bool RtuMaster::WriteMultipleRegisters(uint8_t slave_id, uint16_t start_address,
   return response->GetExceptionCode() == ExceptionCode::kAcknowledge;
 }
 
-bool RtuMaster::WriteMultipleCoils(uint8_t slave_id, uint16_t start_address, std::span<bool const> values) {
+bool RtuMaster::WriteMultipleCoils(uint8_t slave_id, uint16_t start_address, std::span<const bool> values) {
   RtuRequest request({slave_id, FunctionCode::kWriteMultCoils});
   if (!request.SetWriteMultipleCoilsData(start_address, static_cast<uint16_t>(values.size()), values)) {
     return false;
@@ -249,7 +249,7 @@ std::optional<uint8_t> RtuMaster::ReadExceptionStatus(uint8_t slave_id) {
 }
 
 std::optional<std::vector<uint8_t>> RtuMaster::Diagnostics(uint8_t slave_id, uint16_t sub_function_code,
-                                                            std::span<uint8_t const> data) {
+                                                           std::span<const uint8_t> data) {
   RtuRequest request({slave_id, FunctionCode::kDiagnostics});
   if (!request.SetDiagnosticsData(sub_function_code, data)) {
     return {};
@@ -329,12 +329,12 @@ bool RtuMaster::MaskWriteRegister(uint8_t slave_id, uint16_t address, uint16_t a
   return (resp_address == address && resp_and == and_mask && resp_or == or_mask);
 }
 
-std::optional<std::vector<int16_t>> RtuMaster::ReadWriteMultipleRegisters(
-    uint8_t slave_id, uint16_t read_start, uint16_t read_count, uint16_t write_start,
-    std::span<int16_t const> write_values) {
+std::optional<std::vector<int16_t>> RtuMaster::ReadWriteMultipleRegisters(uint8_t slave_id, uint16_t read_start,
+                                                                          uint16_t read_count, uint16_t write_start,
+                                                                          std::span<const int16_t> write_values) {
   RtuRequest request({slave_id, FunctionCode::kReadWriteMultRegs});
   if (!request.SetReadWriteMultipleRegistersData(read_start, read_count, write_start,
-                                                  static_cast<uint16_t>(write_values.size()), write_values)) {
+                                                 static_cast<uint16_t>(write_values.size()), write_values)) {
     return {};
   }
   auto response = SendRequest(request);
@@ -380,7 +380,7 @@ std::optional<std::vector<int16_t>> RtuMaster::ReadFIFOQueue(uint8_t slave_id, u
   // Slave sends [high_byte_count, low_byte_count, high_fifo_count, low_fifo_count]
   // MakeInt16 takes (low_byte, high_byte), so we need MakeInt16(low_fifo_count, high_fifo_count)
   uint16_t fifo_count = MakeInt16(data[3], data[2]);
-  if (data.size() < 4 + fifo_count * 2) {
+  if (data.size() < static_cast<size_t>(4 + fifo_count * 2)) {
     return {};
   }
   std::vector<int16_t> fifo_data;
@@ -395,7 +395,7 @@ std::optional<std::vector<int16_t>> RtuMaster::ReadFIFOQueue(uint8_t slave_id, u
 }
 
 std::optional<std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int16_t>>> RtuMaster::ReadFileRecord(
-    uint8_t slave_id, std::span<std::tuple<uint16_t, uint16_t, uint16_t> const> file_records) {
+    uint8_t slave_id, std::span<const std::tuple<uint16_t, uint16_t, uint16_t>> file_records) {
   RtuRequest request({slave_id, FunctionCode::kReadFileRecord});
   if (!request.SetReadFileRecordData(file_records)) {
     return {};
@@ -413,12 +413,12 @@ std::optional<std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int1
   }
 
   uint8_t response_length = data[0];
-  if (data.size() < 1 + response_length) {
+  if (data.size() < static_cast<size_t>(1 + response_length)) {
     return {};
   }
 
   std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int16_t>> result;
-  size_t offset = 1;  // Skip response_length
+  size_t offset = 1;                        // Skip response_length
   size_t end_offset = 1 + response_length;  // End of response data
 
   while (offset < end_offset) {
@@ -457,7 +457,7 @@ std::optional<std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int1
 }
 
 bool RtuMaster::WriteFileRecord(uint8_t slave_id,
-                                 std::span<std::tuple<uint16_t, uint16_t, std::vector<int16_t>> const> file_records) {
+                                std::span<const std::tuple<uint16_t, uint16_t, std::vector<int16_t>>> file_records) {
   RtuRequest request({slave_id, FunctionCode::kWriteFileRecord});
   if (!request.SetWriteFileRecordData(file_records)) {
     return false;
@@ -469,12 +469,12 @@ bool RtuMaster::WriteFileRecord(uint8_t slave_id,
   return response->GetExceptionCode() == ExceptionCode::kAcknowledge;
 }
 
-std::optional<RtuResponse> RtuMaster::SendRequest(RtuRequest const &request, uint32_t timeout_ms) {
+std::optional<RtuResponse> RtuMaster::SendRequest(const RtuRequest &request, uint32_t timeout_ms) {
   // Encode request to frame
   std::vector<uint8_t> frame = RtuFrame::EncodeRequest(request);
 
   // Write frame to transport
-  int bytes_written = transport_.Write(std::span<uint8_t const>(frame.data(), frame.size()));
+  int bytes_written = transport_.Write(std::span<const uint8_t>(frame.data(), frame.size()));
   if (bytes_written != static_cast<int>(frame.size())) {
     return {};
   }
@@ -503,7 +503,7 @@ std::optional<RtuResponse> RtuMaster::ReceiveResponse(uint8_t expected_slave_id,
     return {};
   }
 
-  auto response = RtuFrame::DecodeResponse(std::span<uint8_t const>(frame->data(), frame->size()));
+  auto response = RtuFrame::DecodeResponse(std::span<const uint8_t>(frame->data(), frame->size()));
   if (!response.has_value()) {
     return {};
   }
@@ -543,7 +543,7 @@ std::optional<std::vector<uint8_t>> RtuMaster::ReadFrame(uint32_t timeout_ms) {
       frame_started = true;
 
       // Check if we have a complete frame (master reads responses)
-      std::span<uint8_t const> frame_span(buffer.data(), buffer.size());
+      std::span<const uint8_t> frame_span(buffer.data(), buffer.size());
       if (RtuFrame::IsResponseFrameComplete(frame_span)) {
         return buffer;
       }
@@ -565,7 +565,7 @@ std::optional<std::vector<uint8_t>> RtuMaster::ReadFrame(uint32_t timeout_ms) {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     } else if (frame_started && bytes_read == 0) {
       // Frame started but no more data available - might be complete (master reads responses)
-      std::span<uint8_t const> frame_span(buffer.data(), buffer.size());
+      std::span<const uint8_t> frame_span(buffer.data(), buffer.size());
       if (RtuFrame::IsResponseFrameComplete(frame_span)) {
         return buffer;
       }

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <cstdint>
-#include <vector>
 #include "../common/exception_code.hpp"
 #include "../common/function_code.hpp"
+#include <cstdint>
+#include <vector>
 
 namespace supermb {
 
@@ -19,9 +19,9 @@ class RtuResponse {
   [[nodiscard]] ExceptionCode GetExceptionCode() const noexcept { return exception_code_; }
   [[nodiscard]] std::vector<uint8_t> GetData() const { return data_; }
 
-  void SetExceptionCode(ExceptionCode const &exception_code) noexcept { exception_code_ = exception_code; }
+  void SetExceptionCode(const ExceptionCode &exception_code) noexcept { exception_code_ = exception_code; }
 
-  void SetData(std::vector<uint8_t> const &data) { data_ = data; };
+  void SetData(const std::vector<uint8_t> &data) { data_ = data; };
   void EmplaceBack(uint8_t data) { data_.emplace_back(data); }
 
  private:

@@ -14,7 +14,7 @@ namespace supermb {
  * @param data Data to calculate CRC for
  * @return 16-bit CRC value (little-endian order for Modbus)
  */
-[[nodiscard]] inline uint16_t CalculateCrc16(std::span<uint8_t const> data) {
+[[nodiscard]] inline uint16_t CalculateCrc16(std::span<const uint8_t> data) {
   constexpr uint16_t kPolynomial = 0xA001;  // Reversed polynomial
   constexpr uint16_t kInitialValue = 0xFFFF;
 
@@ -41,7 +41,7 @@ namespace supermb {
  * @param frame Complete frame including CRC bytes (last 2 bytes)
  * @return true if CRC is valid, false otherwise
  */
-[[nodiscard]] inline bool VerifyCrc16(std::span<uint8_t const> frame) {
+[[nodiscard]] inline bool VerifyCrc16(std::span<const uint8_t> frame) {
   if (frame.size() < 2) {
     return false;
   }
@@ -51,8 +51,8 @@ namespace supermb {
   uint16_t calculated_crc = CalculateCrc16(data_span);
 
   // Extract CRC from frame (little-endian: low byte first, then high byte)
-  uint16_t frame_crc = static_cast<uint16_t>(frame[frame.size() - 2]) |
-                       (static_cast<uint16_t>(frame[frame.size() - 1]) << 8);
+  uint16_t frame_crc =
+      static_cast<uint16_t>(frame[frame.size() - 2]) | (static_cast<uint16_t>(frame[frame.size() - 1]) << 8);
 
   return calculated_crc == frame_crc;
 }

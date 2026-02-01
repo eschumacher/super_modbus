@@ -89,7 +89,7 @@ int main() {
 
   // Example 8: Broadcast write (slave ID 0)
   std::cout << "\nExample 8: Broadcast write to all slaves (slave ID 0)...\n";
-  success = master.WriteSingleRegister(0, 0, 0xABCD);  // Broadcast
+  success = master.WriteSingleRegister(0, 0, static_cast<int16_t>(0xABCD));  // Broadcast
   if (success) {
     std::cout << "  Broadcast write successful (no response expected)\n";
   }
@@ -98,8 +98,7 @@ int main() {
   std::cout << "\nExample 9: Reading exception status from slave 1...\n";
   auto exception_status = master.ReadExceptionStatus(1);
   if (exception_status.has_value()) {
-    std::cout << "  Exception status: 0x" << std::hex
-              << static_cast<int>(*exception_status) << std::dec << "\n";
+    std::cout << "  Exception status: 0x" << std::hex << static_cast<int>(*exception_status) << std::dec << "\n";
   }
 
   // Example 10: Read FIFO queue

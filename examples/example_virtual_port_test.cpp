@@ -39,7 +39,7 @@ void signal_handler(int signal) {
   g_running = false;
 }
 
-void RunMaster(const std::string& port, int baud_rate, uint8_t slave_id) {
+void RunMaster(const std::string &port, int baud_rate, uint8_t slave_id) {
   std::cout << "=== Modbus Master Mode ===\n";
   std::cout << "Port: " << port << "\n";
   std::cout << "Baud Rate: " << baud_rate << "\n";
@@ -103,7 +103,7 @@ void RunMaster(const std::string& port, int baud_rate, uint8_t slave_id) {
   std::cout << "Master test complete!\n";
 }
 
-void RunSlave(const std::string& port, int baud_rate, uint8_t slave_id) {
+void RunSlave(const std::string &port, int baud_rate, uint8_t slave_id) {
   std::cout << "=== Modbus Slave Mode ===\n";
   std::cout << "Port: " << port << "\n";
   std::cout << "Baud Rate: " << baud_rate << "\n";
@@ -169,7 +169,7 @@ void RunSlave(const std::string& port, int baud_rate, uint8_t slave_id) {
   std::cout << "Total requests processed: " << request_count << "\n";
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, const char *argv[]) {
   // Set up signal handlers
   std::signal(SIGINT, signal_handler);
   std::signal(SIGTERM, signal_handler);

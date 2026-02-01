@@ -32,7 +32,7 @@ class ExampleSerialTransport : public ByteTransport {
    * @param port_name Serial port name (e.g., "/dev/ttyUSB0" on Linux, "COM3" on Windows)
    * @param baud_rate Baud rate (e.g., 9600, 19200, 38400, 115200)
    */
-  ExampleSerialTransport(const char* port_name, int baud_rate) {
+  ExampleSerialTransport(const char *port_name, int baud_rate) {
     // TODO: Open serial port
     // Example (pseudo-code):
     //   serial_fd_ = open(port_name, O_RDWR | O_NOCTTY);
@@ -81,7 +81,7 @@ class ExampleSerialTransport : public ByteTransport {
   }
 
   // ByteWriter interface
-  int Write(std::span<uint8_t const> data) override {
+  int Write(std::span<const uint8_t> data) override {
     // TODO: Write bytes to serial port
     // Example (pseudo-code using POSIX write):
     //   ssize_t bytes_written = write(serial_fd_, data.data(), data.size());

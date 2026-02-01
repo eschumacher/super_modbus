@@ -2,7 +2,6 @@
 #include <array>
 #include <cassert>
 #include <iostream>
-#include <ranges>
 #include <span>
 #include <tuple>
 #include <vector>
@@ -26,10 +25,10 @@ static constexpr uint8_t kMaxFileRecords{255};
 
 // Helper function to check if function code is in valid functions array
 static constexpr bool IsAddressSpanValidFunction(FunctionCode function_code) {
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay,hicpp-no-array-decay)
-  // std::ranges::any_of correctly handles std::array without decay
-  return std::ranges::any_of(kAddressSpanValidFunctions,
-                             [function_code](FunctionCode valid_code) { return valid_code == function_code; });
+  // Use std::any_of with iterators for compiler compatibility (works with all C++11+ compilers)
+  // std::ranges::any_of is not available in libc++ for clang-14/15
+  return std::any_of(std::begin(kAddressSpanValidFunctions), std::end(kAddressSpanValidFunctions),
+                     [function_code](FunctionCode valid_code) { return valid_code == function_code; });
 }
 
 std::optional<AddressSpan> RtuRequest::GetAddressSpan() const {
@@ -93,7 +92,7 @@ bool RtuRequest::SetWriteSingleCoilData(uint16_t coil_address, bool coil_value) 
 }
 
 bool RtuRequest::SetWriteMultipleRegistersData(uint16_t start_address, uint16_t count,
-                                               std::span<int16_t const> values) {
+                                               std::span<const int16_t> values) {
   if (header_.function_code != FunctionCode::kWriteMultRegs) {
     // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);  // likely a library defect if hit - create ticket in github
@@ -121,7 +120,7 @@ bool RtuRequest::SetWriteMultipleRegistersData(uint16_t start_address, uint16_t 
   return true;
 }
 
-bool RtuRequest::SetWriteMultipleCoilsData(uint16_t start_address, uint16_t count, std::span<bool const> values) {
+bool RtuRequest::SetWriteMultipleCoilsData(uint16_t start_address, uint16_t count, std::span<const bool> values) {
   if (header_.function_code != FunctionCode::kWriteMultCoils) {
     // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);  // likely a library defect if hit - create ticket in github
@@ -159,7 +158,7 @@ bool RtuRequest::SetWriteMultipleCoilsData(uint16_t start_address, uint16_t coun
   return true;
 }
 
-bool RtuRequest::SetDiagnosticsData(uint16_t sub_function_code, std::span<uint8_t const> data) {
+bool RtuRequest::SetDiagnosticsData(uint16_t sub_function_code, std::span<const uint8_t> data) {
   if (header_.function_code != FunctionCode::kDiagnostics) {
     // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);
@@ -191,7 +190,7 @@ bool RtuRequest::SetMaskWriteRegisterData(uint16_t address, uint16_t and_mask, u
 }
 
 bool RtuRequest::SetReadWriteMultipleRegistersData(uint16_t read_start, uint16_t read_count, uint16_t write_start,
-                                                   uint16_t write_count, std::span<int16_t const> write_values) {
+                                                   uint16_t write_count, std::span<const int16_t> write_values) {
   if (header_.function_code != FunctionCode::kReadWriteMultRegs) {
     // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);
@@ -236,7 +235,7 @@ bool RtuRequest::SetReadFIFOQueueData(uint16_t fifo_address) {
   return true;
 }
 
-bool RtuRequest::SetReadFileRecordData(std::span<std::tuple<uint16_t, uint16_t, uint16_t> const> file_records) {
+bool RtuRequest::SetReadFileRecordData(std::span<const std::tuple<uint16_t, uint16_t, uint16_t>> file_records) {
   if (header_.function_code != FunctionCode::kReadFileRecord) {
     // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);
@@ -255,7 +254,7 @@ bool RtuRequest::SetReadFileRecordData(std::span<std::tuple<uint16_t, uint16_t, 
   // Encode each record: file_number (high, low) + record_number (high, low) + record_length (high, low)
   // Slave expects: MakeInt16(data[offset+1], data[offset]) = MakeInt16(low, high) where data[offset]=high,
   // data[offset+1]=low
-  for (auto const &[file_number, record_number, record_length] : file_records) {
+  for (const auto &[file_number, record_number, record_length] : file_records) {
     data_.emplace_back(GetHighByte(file_number));
     data_.emplace_back(GetLowByte(file_number));
     data_.emplace_back(GetHighByte(record_number));
@@ -268,7 +267,7 @@ bool RtuRequest::SetReadFileRecordData(std::span<std::tuple<uint16_t, uint16_t, 
 }
 
 bool RtuRequest::SetWriteFileRecordData(
-    std::span<std::tuple<uint16_t, uint16_t, std::vector<int16_t>> const> file_records) {
+    std::span<const std::tuple<uint16_t, uint16_t, std::vector<int16_t>>> file_records) {
   if (header_.function_code != FunctionCode::kWriteFileRecord) {
     // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);
@@ -283,7 +282,7 @@ bool RtuRequest::SetWriteFileRecordData(
 
   // First, build the data without byte_count to calculate it
   std::vector<uint8_t> temp_data;
-  for (auto const &[file_number, record_number, record_data] : file_records) {
+  for (const auto &[file_number, record_number, record_data] : file_records) {
     // Reference type (0x06 for file record)
     temp_data.emplace_back(supermb::kFileRecordReferenceType);
     // File number (high byte, low byte)

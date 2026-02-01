@@ -41,7 +41,7 @@ TEST(NewFunctionCodes, ReadCoils) {
   EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
   auto data = response.GetData();
   ASSERT_GE(data.size(), 2);  // byte_count + at least 1 byte of data
-  EXPECT_EQ(data[0], 1);  // byte_count for 3 coils = 1 byte
+  EXPECT_EQ(data[0], 1);      // byte_count for 3 coils = 1 byte
 
   // Unpack coils
   EXPECT_TRUE((data[1] & 0x01) != 0);   // Coil 0
@@ -142,10 +142,10 @@ TEST(NewFunctionCodes, WriteMultipleCoils) {
   auto data = read_response.GetData();
   ASSERT_GE(data.size(), 2);
   EXPECT_TRUE((data[1] & 0x01) != 0);   // Coil 0
-  EXPECT_FALSE((data[1] & 0x02) != 0);   // Coil 1
+  EXPECT_FALSE((data[1] & 0x02) != 0);  // Coil 1
   EXPECT_TRUE((data[1] & 0x04) != 0);   // Coil 2
-  EXPECT_TRUE((data[1] & 0x08) != 0);    // Coil 3
-  EXPECT_FALSE((data[1] & 0x10) != 0);   // Coil 4
+  EXPECT_TRUE((data[1] & 0x08) != 0);   // Coil 3
+  EXPECT_FALSE((data[1] & 0x10) != 0);  // Coil 4
 }
 
 TEST(NewFunctionCodes, ReadDiscreteInputs) {
@@ -168,5 +168,5 @@ TEST(NewFunctionCodes, ReadDiscreteInputs) {
   EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
   auto data = response.GetData();
   ASSERT_GE(data.size(), 2);  // byte_count + at least 1 byte of data
-  EXPECT_EQ(data[0], 1);  // byte_count for 5 discrete inputs = 1 byte
+  EXPECT_EQ(data[0], 1);      // byte_count for 5 discrete inputs = 1 byte
 }

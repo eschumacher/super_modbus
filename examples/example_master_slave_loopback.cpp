@@ -151,7 +151,7 @@ int main() {
   // Example 7: Broadcast write
   std::cout << "\nExample 7: Broadcast write (slave ID 0)\n";
   std::cout << "  Master broadcasting write to all slaves...\n";
-  success = master.WriteSingleRegister(0, 0, 0xABCD);  // Broadcast
+  success = master.WriteSingleRegister(0, 0, static_cast<int16_t>(0xABCD));  // Broadcast
   // Note: Broadcast doesn't get a response, so no need to simulate
   if (success) {
     std::cout << "  Broadcast successful (no response expected)\n";
@@ -171,8 +171,7 @@ int main() {
   auto exception_status = master.ReadExceptionStatus(1);
   simulate_communication();
   if (exception_status.has_value()) {
-    std::cout << "  Exception status: 0x" << std::hex
-              << static_cast<int>(*exception_status) << std::dec << "\n";
+    std::cout << "  Exception status: 0x" << std::hex << static_cast<int>(*exception_status) << std::dec << "\n";
   }
 
   // Example 10: Read FIFO queue
@@ -188,8 +187,7 @@ int main() {
   if (fifo_result.has_value()) {
     std::cout << "  Read " << fifo_result->size() << " values from FIFO:\n";
     for (size_t i = 0; i < fifo_result->size(); ++i) {
-      std::cout << "    FIFO[" << i << "] = 0x" << std::hex
-                << (*fifo_result)[i] << std::dec << "\n";
+      std::cout << "    FIFO[" << i << "] = 0x" << std::hex << (*fifo_result)[i] << std::dec << "\n";
     }
   }
 

@@ -5,5 +5,5 @@ DerivePointerAlignment: false
 IncludeBlocks: Merge
 PackConstructorInitializers: Never
 PointerAlignment: Right
-QualifierAlignment: Right
+QualifierAlignment: Left
 SortIncludes: false

@@ -21,7 +21,7 @@ class ByteWriter {
    * @param data Bytes to write
    * @return Number of bytes actually written (-1 on error)
    */
-  [[nodiscard]] virtual int Write(std::span<uint8_t const> data) = 0;
+  [[nodiscard]] virtual int Write(std::span<const uint8_t> data) = 0;
 
   /**
    * @brief Flush any buffered data

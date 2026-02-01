@@ -420,6 +420,30 @@ ctest
 5. Run code formatting: `clang-format -i <files>`
 6. Submit a pull request
 
+### Git Hooks (Recommended)
+
+The repository includes git hooks to automatically check code formatting before commits and pushes. To install them:
+
+```bash
+./scripts/setup-git-hooks.sh
+```
+
+This will install:
+- **pre-commit hook**: Checks formatting before each commit
+- **pre-push hook**: Checks formatting before each push
+
+The hooks will automatically prevent commits/pushes if code is not properly formatted. To format all staged files:
+
+```bash
+git diff --cached --name-only --diff-filter=ACM | grep -E '\.(cpp|hpp|h)$' | xargs clang-format -i && git add -u
+```
+
+To bypass hooks (not recommended):
+```bash
+git commit --no-verify
+git push --no-verify
+```
+
 ## License
 
 See LICENSE file for details.

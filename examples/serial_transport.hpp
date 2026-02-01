@@ -54,8 +54,7 @@ class SerialTransport : public ByteTransport {
    * @param data_bits Data bits (typically 8)
    * @param stop_bits Stop bits (1 or 2)
    */
-  SerialTransport(const std::string& port_name, int baud_rate, char parity = 'E',
-                   int data_bits = 8, int stop_bits = 1)
+  SerialTransport(const std::string &port_name, int baud_rate, char parity = 'E', int data_bits = 8, int stop_bits = 1)
       : port_name_(port_name),
         fd_(-1),
         baud_rate_(baud_rate),
@@ -68,16 +67,14 @@ class SerialTransport : public ByteTransport {
   /**
    * @brief Destructor - closes serial port
    */
-  ~SerialTransport() override {
-    Close();
-  }
+  ~SerialTransport() override { Close(); }
 
   // Delete copy constructor and assignment
-  SerialTransport(const SerialTransport&) = delete;
-  SerialTransport& operator=(const SerialTransport&) = delete;
+  SerialTransport(const SerialTransport &) = delete;
+  SerialTransport &operator=(const SerialTransport &) = delete;
 
   // Move constructor
-  SerialTransport(SerialTransport&& other) noexcept
+  SerialTransport(SerialTransport &&other) noexcept
       : port_name_(std::move(other.port_name_)),
         fd_(other.fd_),
         baud_rate_(other.baud_rate_),
@@ -88,7 +85,7 @@ class SerialTransport : public ByteTransport {
   }
 
   // Move assignment
-  SerialTransport& operator=(SerialTransport&& other) noexcept {
+  SerialTransport &operator=(SerialTransport &&other) noexcept {
     if (this != &other) {
       Close();
       port_name_ = std::move(other.port_name_);
@@ -105,9 +102,7 @@ class SerialTransport : public ByteTransport {
   /**
    * @brief Check if port is open
    */
-  bool IsOpen() const {
-    return fd_ >= 0;
-  }
+  bool IsOpen() const { return fd_ >= 0; }
 
   /**
    * @brief Reopen the port (useful for recovery)
@@ -167,7 +162,7 @@ class SerialTransport : public ByteTransport {
   }
 
   // ByteWriter interface
-  int Write(std::span<uint8_t const> data) override {
+  int Write(std::span<const uint8_t> data) override {
     if (fd_ < 0) {
       return -1;
     }

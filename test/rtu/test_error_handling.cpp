@@ -122,9 +122,9 @@ TEST(ErrorHandling, InvalidDataValue) {
   // Write multiple registers with invalid byte count
   RtuRequest request{{kSlaveId, FunctionCode::kWriteMultRegs}};
   std::vector<uint8_t> invalid_data{
-      0x00, 0x00,  // Address
-      0x00, 0x02,  // Count = 2
-      0x03,        // Byte count = 3 (should be 4 for 2 registers)
+      0x00, 0x00,       // Address
+      0x00, 0x02,       // Count = 2
+      0x03,             // Byte count = 3 (should be 4 for 2 registers)
       0x12, 0x34, 0x56  // Only 3 bytes of data
   };
   request.SetRawData(invalid_data);
@@ -212,7 +212,6 @@ TEST(ErrorHandling, InvalidReadWriteMultipleData) {
 }
 
 TEST(ErrorHandling, FrameWithInvalidSlaveIDInResponse) {
-  static constexpr uint8_t kSlaveId{1};
   static constexpr uint8_t kExpectedSlaveId{1};
   static constexpr uint8_t kWrongSlaveId{99};
 

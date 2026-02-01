@@ -14,7 +14,7 @@
 
 namespace supermb {
 
-std::vector<uint8_t> RtuFrame::EncodeRequest(RtuRequest const &request) {
+std::vector<uint8_t> RtuFrame::EncodeRequest(const RtuRequest &request) {
   std::vector<uint8_t> frame;
 
   // Slave ID
@@ -24,18 +24,18 @@ std::vector<uint8_t> RtuFrame::EncodeRequest(RtuRequest const &request) {
   frame.push_back(static_cast<uint8_t>(request.GetFunctionCode()));
 
   // Data
-  auto const &data = request.GetData();
+  const auto &data = request.GetData();
   frame.insert(frame.end(), data.begin(), data.end());
 
   // Calculate and append CRC (little-endian: low byte first)
-  uint16_t crc = CalculateCrc16(std::span<uint8_t const>(frame.data(), frame.size()));
+  uint16_t crc = CalculateCrc16(std::span<const uint8_t>(frame.data(), frame.size()));
   frame.push_back(GetLowByte(crc));
   frame.push_back(GetHighByte(crc));
 
   return frame;
 }
 
-std::vector<uint8_t> RtuFrame::EncodeResponse(RtuResponse const &response) {
+std::vector<uint8_t> RtuFrame::EncodeResponse(const RtuResponse &response) {
   std::vector<uint8_t> frame;
 
   // Slave ID
@@ -57,19 +57,19 @@ std::vector<uint8_t> RtuFrame::EncodeResponse(RtuResponse const &response) {
     frame.push_back(static_cast<uint8_t>(response.GetExceptionCode()));
   } else {
     // Normal response: include data
-    auto const data = response.GetData();
+    const auto data = response.GetData();
     frame.insert(frame.end(), data.begin(), data.end());
   }
 
   // Calculate and append CRC (little-endian: low byte first)
-  uint16_t crc = CalculateCrc16(std::span<uint8_t const>(frame.data(), frame.size()));
+  uint16_t crc = CalculateCrc16(std::span<const uint8_t>(frame.data(), frame.size()));
   frame.push_back(GetLowByte(crc));
   frame.push_back(GetHighByte(crc));
 
   return frame;
 }
 
-std::optional<RtuRequest> RtuFrame::DecodeRequest(std::span<uint8_t const> frame) {
+std::optional<RtuRequest> RtuFrame::DecodeRequest(std::span<const uint8_t> frame) {
   // Minimum frame: slave_id (1) + function_code (1) + CRC (2) = 4 bytes
   if (frame.size() < kMinFrameSize) {
     return {};
@@ -131,7 +131,7 @@ std::optional<RtuRequest> RtuFrame::DecodeRequest(std::span<uint8_t const> frame
   return request;
 }
 
-std::optional<RtuResponse> RtuFrame::DecodeResponse(std::span<uint8_t const> frame) {
+std::optional<RtuResponse> RtuFrame::DecodeResponse(std::span<const uint8_t> frame) {
   // Minimum frame: slave_id (1) + function_code (1) + CRC (2) = 4 bytes
   if (frame.size() < kMinFrameSize) {
     return {};
@@ -154,7 +154,9 @@ std::optional<RtuResponse> RtuFrame::DecodeResponse(std::span<uint8_t const> fra
 
   if (is_exception) {
     // Exception response: next byte is exception code
-    if (frame.size() >= 3) {
+    // Note: frame.size() >= kMinFrameSize (4) already checked above, so >= 3 is always true
+    // But we keep the check for clarity and defensive programming
+    if (frame.size() >= 3) {  // NOLINT(cppcheck-suppress knownConditionTrueFalse)
       auto exception_code = static_cast<ExceptionCode>(frame[2]);
       response.SetExceptionCode(exception_code);
     }
@@ -189,7 +191,7 @@ size_t RtuFrame::GetMinFrameSize(FunctionCode function_code) {
   }
 }
 
-bool RtuFrame::IsRequestFrameComplete(std::span<uint8_t const> frame) {
+bool RtuFrame::IsRequestFrameComplete(std::span<const uint8_t> frame) {
   if (frame.size() < 2) {
     return false;  // Need at least slave_id and function_code
   }
@@ -199,7 +201,7 @@ bool RtuFrame::IsRequestFrameComplete(std::span<uint8_t const> frame) {
   return frame.size() >= min_size;
 }
 
-bool RtuFrame::IsResponseFrameComplete(std::span<uint8_t const> frame) {
+bool RtuFrame::IsResponseFrameComplete(std::span<const uint8_t> frame) {
   if (frame.size() < 2) {
     return false;  // Need at least slave_id and function_code
   }
@@ -236,7 +238,7 @@ bool RtuFrame::IsResponseFrameComplete(std::span<uint8_t const> frame) {
   return frame.size() >= min_size;
 }
 
-bool RtuFrame::IsFrameComplete(std::span<uint8_t const> frame) {
+bool RtuFrame::IsFrameComplete(std::span<const uint8_t> frame) {
   // Legacy function - try to determine if it's a request or response
   // This is less reliable, prefer using IsRequestFrameComplete or IsResponseFrameComplete
   if (frame.size() < 2) {

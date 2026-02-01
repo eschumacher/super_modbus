@@ -68,9 +68,9 @@ class MasterSlaveSimulator {
   }
 
   // Helper to manually send a request (encode and write without receiving)
-  void SendRequestOnly(RtuRequest const &request) {
+  void SendRequestOnly(const RtuRequest &request) {
     auto frame = RtuFrame::EncodeRequest(request);
-    auto bytes_written = transport_.Write(std::span<uint8_t const>(frame.data(), frame.size()));
+    auto bytes_written = transport_.Write(std::span<const uint8_t>(frame.data(), frame.size()));
     ASSERT_EQ(bytes_written, frame.size());
     (void)transport_.Flush();
   }
@@ -828,7 +828,6 @@ TEST(MasterIntegration, WriteFileRecord) {
 TEST(MasterIntegration, CoilPacking) {
   static constexpr uint8_t kSlaveId{23};
   static constexpr size_t kTestCoilCount = 16;
-  static constexpr size_t kCoilsPerByte = 8;
 
   MasterSlaveSimulator sim{kSlaveId};
   sim.SetupCoils({0, kTestCoilCount});

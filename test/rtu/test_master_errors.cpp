@@ -25,7 +25,9 @@ using supermb::RtuSlave;
 // Helper class to simulate master-slave communication
 class MasterSlaveSimulator {
  public:
-  MasterSlaveSimulator(uint8_t slave_id) : slave_(slave_id), master_(transport_) {}
+  explicit MasterSlaveSimulator(uint8_t slave_id)
+      : slave_(slave_id),
+        master_(transport_) {}
 
   void SetupRegisters(AddressSpan span) { slave_.AddHoldingRegisters(span); }
   void SetupInputRegisters(AddressSpan span) { slave_.AddInputRegisters(span); }
@@ -48,9 +50,9 @@ class MasterSlaveSimulator {
     transport_.ResetReadPosition();
   }
 
-  void SendRequestOnly(RtuRequest const &request) {
+  void SendRequestOnly(const RtuRequest &request) {
     auto frame = RtuFrame::EncodeRequest(request);
-    (void)transport_.Write(std::span<uint8_t const>(frame.data(), frame.size()));
+    (void)transport_.Write(std::span<const uint8_t>(frame.data(), frame.size()));
     (void)transport_.Flush();
   }
 

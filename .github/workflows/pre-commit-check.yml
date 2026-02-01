@@ -1,0 +1,57 @@
+name: Pre-commit Checks
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  format-check:
+    name: Format Check (Pre-commit)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch all history for proper diff
+
+    - name: Install clang-format
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang-format
+        clang-format --version
+
+    - name: Check code formatting
+      run: |
+        # Get changed files in PR
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          CHANGED_FILES=$(git diff --name-only --diff-filter=ACM "$BASE_SHA" "$HEAD_SHA" | grep -E '\.(cpp|hpp|h)$' || true)
+        else
+          CHANGED_FILES=$(git diff --name-only --diff-filter=ACM HEAD~1 HEAD | grep -E '\.(cpp|hpp|h)$' || true)
+        fi
+
+        if [ -z "$CHANGED_FILES" ]; then
+          echo "No C++ files changed, skipping format check"
+          exit 0
+        fi
+
+        FAILED_FILES=()
+        while IFS= read -r file; do
+          if [ -f "$file" ]; then
+            # Use --style=file which looks for .clang-format in current dir or parent dirs
+            if ! clang-format --style=file --dry-run --Werror "$file" >/dev/null 2>&1; then
+              FAILED_FILES+=("$file")
+            fi
+          fi
+        done <<< "$CHANGED_FILES"
+
+        if [ ${#FAILED_FILES[@]} -gt 0 ]; then
+          echo "::error::Formatting errors found in the following files:"
+          for file in "${FAILED_FILES[@]}"; do
+            echo "  - $file"
+            echo "    Fix with: clang-format -i $file"
+          done
+          exit 1
+        else
+          echo "✓ All changed files are properly formatted"
+        fi

@@ -1,0 +1,48 @@
+# Codespell ignore file
+# Add words here that should be ignored by spell checking
+# Format: one word per line
+
+# Common technical terms
+Modbus
+RTU
+CRC
+PDU
+FIFO
+mbpoll
+socat
+com0com
+ttyUSB
+ttyACM
+ttyS
+clang
+gcc
+cppcheck
+valgrind
+codespell
+Doxyfile
+CMakeLists
+googletest
+supermb
+supermodbus
+
+# File extensions and paths
+gcda
+gcno
+gcov
+hpp
+cpp
+cmake
+
+# Common abbreviations
+std
+uint
+int16
+uint8
+uint16
+span
+optional
+vector
+unordered
+hash
+pair
+size_t

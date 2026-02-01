@@ -184,18 +184,18 @@ TEST(RemainingFunctionCodes, ReadFileRecord) {
   // First write a file record
   RtuRequest write_req{{kSlaveId, FunctionCode::kWriteFileRecord}};
   std::vector<uint8_t> write_data;
-  write_data.push_back(0x00);  // Byte count (will be calculated)
-  write_data.push_back(0x06);  // Reference type
-  write_data.push_back(0x00);  // File number high
-  write_data.push_back(0x01);  // File number low (file 1)
-  write_data.push_back(0x00);  // Record number high
-  write_data.push_back(0x00);  // Record number low (record 0)
-  write_data.push_back(0x00);  // Record length high
-  write_data.push_back(0x02);  // Record length low (2 registers)
-  write_data.push_back(0x12);  // Register 0 low
-  write_data.push_back(0x34);  // Register 0 high
-  write_data.push_back(0x56);  // Register 1 low
-  write_data.push_back(0x78);  // Register 1 high
+  write_data.push_back(0x00);                                   // Byte count (will be calculated)
+  write_data.push_back(0x06);                                   // Reference type
+  write_data.push_back(0x00);                                   // File number high
+  write_data.push_back(0x01);                                   // File number low (file 1)
+  write_data.push_back(0x00);                                   // Record number high
+  write_data.push_back(0x00);                                   // Record number low (record 0)
+  write_data.push_back(0x00);                                   // Record length high
+  write_data.push_back(0x02);                                   // Record length low (2 registers)
+  write_data.push_back(0x12);                                   // Register 0 low
+  write_data.push_back(0x34);                                   // Register 0 high
+  write_data.push_back(0x56);                                   // Register 1 low
+  write_data.push_back(0x78);                                   // Register 1 high
   write_data[0] = static_cast<uint8_t>(write_data.size() - 1);  // Set byte count
   write_req.SetRawData(write_data);
   RtuResponse write_resp = slave.Process(write_req);
@@ -205,12 +205,12 @@ TEST(RemainingFunctionCodes, ReadFileRecord) {
   RtuRequest read_req{{kSlaveId, FunctionCode::kReadFileRecord}};
   std::vector<uint8_t> read_data;
   read_data.push_back(0x06);  // Byte count (6 bytes for one record request)
-  read_data.push_back(0x00);   // File number high
-  read_data.push_back(0x01);   // File number low (file 1)
-  read_data.push_back(0x00);   // Record number high
-  read_data.push_back(0x00);   // Record number low (record 0)
-  read_data.push_back(0x00);   // Record length high
-  read_data.push_back(0x02);   // Record length low (2 registers)
+  read_data.push_back(0x00);  // File number high
+  read_data.push_back(0x01);  // File number low (file 1)
+  read_data.push_back(0x00);  // Record number high
+  read_data.push_back(0x00);  // Record number low (record 0)
+  read_data.push_back(0x00);  // Record length high
+  read_data.push_back(0x02);  // Record length low (2 registers)
   read_req.SetRawData(read_data);
   RtuResponse response = slave.Process(read_req);
 
@@ -231,18 +231,18 @@ TEST(RemainingFunctionCodes, WriteFileRecord) {
   // Write file record
   RtuRequest request{{kSlaveId, FunctionCode::kWriteFileRecord}};
   std::vector<uint8_t> write_data;
-  write_data.push_back(0x00);  // Byte count (will be calculated)
-  write_data.push_back(0x06);   // Reference type
-  write_data.push_back(0x00);   // File number high
-  write_data.push_back(0x01);   // File number low (file 1)
-  write_data.push_back(0x00);   // Record number high
-  write_data.push_back(0x00);   // Record number low (record 0)
-  write_data.push_back(0x00);   // Record length high
-  write_data.push_back(0x02);   // Record length low (2 registers)
-  write_data.push_back(0xAB);   // Register 0 low
-  write_data.push_back(0xCD);   // Register 0 high
-  write_data.push_back(0xEF);   // Register 1 low
-  write_data.push_back(0x01);   // Register 1 high
+  write_data.push_back(0x00);                                   // Byte count (will be calculated)
+  write_data.push_back(0x06);                                   // Reference type
+  write_data.push_back(0x00);                                   // File number high
+  write_data.push_back(0x01);                                   // File number low (file 1)
+  write_data.push_back(0x00);                                   // Record number high
+  write_data.push_back(0x00);                                   // Record number low (record 0)
+  write_data.push_back(0x00);                                   // Record length high
+  write_data.push_back(0x02);                                   // Record length low (2 registers)
+  write_data.push_back(0xAB);                                   // Register 0 low
+  write_data.push_back(0xCD);                                   // Register 0 high
+  write_data.push_back(0xEF);                                   // Register 1 low
+  write_data.push_back(0x01);                                   // Register 1 high
   write_data[0] = static_cast<uint8_t>(write_data.size() - 1);  // Set byte count
   request.SetRawData(write_data);
   RtuResponse response = slave.Process(request);

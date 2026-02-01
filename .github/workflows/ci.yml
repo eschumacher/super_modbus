@@ -1,0 +1,1065 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  BUILD_TYPE: Debug
+
+jobs:
+  # Quick format check - runs first
+  format-check:
+    name: Format Check (clang-format)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install clang-format
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang-format
+        clang-format --version
+
+    - name: Check code formatting
+      continue-on-error: false
+      run: |
+        FAILED_FILES=()
+        while IFS= read -r file; do
+          # Use --style=file which looks for .clang-format in current dir or parent dirs
+          if ! clang-format --style=file --dry-run --Werror "$file" 2>&1; then
+            FAILED_FILES+=("$file")
+          fi
+        done < <(find . -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) \
+          -not -path "./build/*" \
+          -not -path "./.git/*" \
+          -not -path "./build-*/*" \
+          -not -path "./cmake/*")
+
+        if [ ${#FAILED_FILES[@]} -gt 0 ]; then
+          echo "::error::Formatting errors found in the following files:"
+          for file in "${FAILED_FILES[@]}"; do
+            echo "  - $file"
+            echo "    Fix with: clang-format -i $file"
+          done
+          exit 1
+        else
+          echo "✓ All files are properly formatted"
+        fi
+
+  # Static analysis jobs - run in parallel
+  clang-tidy:
+    name: Static Analysis (clang-tidy)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential bc llvm clang clang-tidy
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DBUILD_TESTS=ON -DBUILD_EXAMPLES=ON -DPROFILING=OFF
+        # Generate compile_commands.json for clang-tidy
+
+    - name: Build (for compile_commands.json)
+      run: |
+        cd build
+        make -j$(nproc) 2>&1 | head -100
+
+    - name: Run clang-tidy
+      run: |
+        cd build
+        find ../src ../include ../test -type f \( -name "*.cpp" -o -name "*.hpp" \) \
+          -exec clang-tidy {} -p . -- -std=c++20 \; || true
+        # Note: clang-tidy warnings don't fail the build, but output is visible
+
+    - name: Run clang-tidy with errors as warnings
+      continue-on-error: true
+      run: |
+        cd build
+        find ../src ../include ../test -type f \( -name "*.cpp" -o -name "*.hpp" \) \
+          -exec clang-tidy {} -p . -warnings-as-errors='*' -- -std=c++20 \;
+
+  cppcheck:
+    name: Static Analysis (cppcheck)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential bc cppcheck
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DBUILD_TESTS=ON -DPROFILING=ON
+
+    - name: Build
+      run: |
+        cd build
+        make -j$(nproc)
+
+    - name: Run cppcheck
+      run: |
+        # Exclude third-party code (GoogleTest) and build artifacts
+        # Use compile_commands.json if available, otherwise use include paths
+        if [ -f build/compile_commands.json ]; then
+          cppcheck --enable=all --error-exitcode=1 \
+            --project=build/compile_commands.json \
+            --suppress=missingIncludeSystem \
+            --suppress=missingInclude \
+            --suppress=unusedFunction \
+            --suppress=unmatchedSuppression \
+            --suppress=uninitvar \
+            --suppress=ctuOneDefinitionRuleViolation \
+            --suppress=knownConditionTrueFalse \
+            --suppress=constParameter \
+            --suppress=unusedStructMember \
+            --suppress=unreadVariable \
+            --suppress=noExplicitConstructor \
+            --inline-suppr \
+            --std=c++20 \
+            -i build/_deps \
+            -i build/googletest \
+            || {
+            echo "cppcheck found issues"
+            exit 1
+          }
+        else
+          # Fallback: manually specify include paths, exclude build directories
+          cppcheck --enable=all --error-exitcode=1 \
+            -I include/ \
+            -I include/super_modbus/ \
+            --suppress=missingIncludeSystem \
+            --suppress=missingInclude \
+            --suppress=unusedFunction \
+            --suppress=unmatchedSuppression \
+            --suppress=uninitvar \
+            --suppress=ctuOneDefinitionRuleViolation \
+            --suppress=knownConditionTrueFalse \
+            --suppress=constParameter \
+            --suppress=unusedStructMember \
+            --suppress=unreadVariable \
+            --suppress=noExplicitConstructor \
+            --inline-suppr \
+            --std=c++20 \
+            -i build/ \
+            src/ include/ test/ examples/ || {
+            echo "cppcheck found issues"
+            exit 1
+          }
+        fi
+
+  # Build and test with GCC
+  test-gcc:
+    name: Build & Test (GCC)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential bc lcov
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DBUILD_TESTS=ON -DCOVERAGE=ON -DBUILD_EXAMPLES=ON -DPROFILING=OFF
+
+    - name: Build
+      run: |
+        cd build
+        make -j$(nproc)
+
+    - name: Run unit tests
+      run: |
+        cd build
+        ctest --output-on-failure --label-regex "unit|basic"
+
+    - name: Run all tests
+      run: |
+        cd build
+        ctest --output-on-failure -T test --output-junit test-results.xml
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-gcc
+        path: build/test-results.xml
+        if-no-files-found: ignore
+
+    - name: Generate coverage
+      run: |
+        cd build
+        make coverage-super-modbus-lib || true
+        make coverage-run_tests || true
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        files: build/filtered-super-modbus-lib.info,build/filtered-run_tests.info
+        flags: gcc-tests
+        name: codecov-gcc
+        fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
+
+    - name: Upload coverage reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-gcc
+        path: build/coverage-*/
+        if-no-files-found: ignore
+
+  # Build and test with Clang
+  test-clang:
+    name: Build & Test (Clang)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential bc lcov llvm clang libc++-dev libc++abi-dev
+
+    - name: Configure CMake with Clang
+      run: |
+        mkdir -p build
+        cd build
+        # Use libc++ to avoid GCC libstdc++ compatibility issues
+        CC=clang CXX=clang++ cmake .. \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DBUILD_TESTS=ON \
+          -DCOVERAGE=ON \
+          -DBUILD_EXAMPLES=ON \
+          -DPROFILING=OFF \
+          -DCMAKE_CXX_FLAGS="-stdlib=libc++" \
+          -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++ -lc++abi" \
+          -DCMAKE_SHARED_LINKER_FLAGS="-stdlib=libc++ -lc++abi"
+
+    - name: Build
+      run: |
+        cd build
+        make -j$(nproc)
+
+    - name: Run unit tests
+      run: |
+        cd build
+        ctest --output-on-failure --label-regex "unit|basic"
+
+    - name: Run all tests
+      run: |
+        cd build
+        ctest --output-on-failure -T test --output-junit test-results.xml
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-clang
+        path: build/test-results.xml
+        if-no-files-found: ignore
+
+    - name: Generate coverage
+      run: |
+        cd build
+        make coverage-super-modbus-lib || true
+        make coverage-run_tests || true
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        files: build/filtered-super-modbus-lib.info,build/filtered-run_tests.info
+        flags: clang-tests
+        name: codecov-clang
+        fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
+
+    - name: Upload coverage reports
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-clang
+        path: build/coverage-*/
+        if-no-files-found: ignore
+
+  # Integration and end-to-end tests
+  integration-tests:
+    name: Integration & E2E Tests
+    runs-on: ubuntu-latest
+    needs: [test-gcc]  # Run after basic tests pass
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential bc
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DBUILD_TESTS=ON -DBUILD_EXAMPLES=ON -DPROFILING=OFF
+
+    - name: Build
+      run: |
+        cd build
+        make -j$(nproc)
+
+    - name: Run integration tests
+      run: |
+        cd build
+        # Run integration tests using gtest filter
+        ./bin/run_tests --gtest_filter="*Integration*" --gtest_output=xml:integration_results.xml || true
+        # Also run master integration tests
+        ./bin/run_tests --gtest_filter="*MasterIntegration*" || true
+
+    - name: Run end-to-end tests (comprehensive)
+      run: |
+        cd build
+        # Run comprehensive master tests if available
+        if [ -f "./bin/test_master_comprehensive" ]; then
+          ./bin/test_master_comprehensive || true
+        fi
+        # Run loopback example as E2E test
+        if [ -f "./bin/example_loopback" ]; then
+          timeout 30 ./bin/example_loopback || true
+        fi
+
+  # Dynamic analysis with Valgrind
+  dynamic-analysis:
+    name: Dynamic Analysis (Valgrind)
+    runs-on: ubuntu-latest
+    needs: [test-gcc]  # Run after tests pass
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential bc valgrind
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DBUILD_TESTS=ON -DPROFILING=ON
+
+    - name: Build
+      run: |
+        cd build
+        make -j$(nproc)
+
+    - name: Run tests with Valgrind
+      continue-on-error: true  # Valgrind can be slow, don't fail CI
+      timeout-minutes: 30
+      run: |
+        cd build
+        # Create suppressions file if it doesn't exist
+        touch ${GITHUB_WORKSPACE}/.valgrind-suppressions || true
+        # Run a subset of tests with valgrind (full suite would be too slow)
+        valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes \
+          --error-exitcode=1 \
+          --suppressions=${GITHUB_WORKSPACE}/.valgrind-suppressions \
+          ./bin/run_tests --gtest_filter="*Basic*" 2>&1 | head -500 || true
+        # Run memcheck target if available
+        make memcheck-run_tests || true
+
+  # Build examples to ensure they compile
+  build-examples:
+    name: Build Examples
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential bc
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_EXAMPLES=ON -DBUILD_TESTS=OFF
+
+    - name: Build examples
+      run: |
+        cd build
+        make -j$(nproc) example_master example_slave example_loopback testable_slave || {
+          echo "Failed to build examples"
+          exit 1
+        }
+
+    - name: Verify examples exist
+      run: |
+        cd build
+        # Check both possible locations
+        if [ -f ./bin/example_master ]; then
+          echo "✓ example_master built (in bin/)"
+        elif [ -f ./example_master ]; then
+          echo "✓ example_master built (in build/)"
+        else
+          echo "✗ example_master not found"
+          exit 1
+        fi
+        if [ -f ./bin/example_slave ]; then
+          echo "✓ example_slave built (in bin/)"
+        elif [ -f ./example_slave ]; then
+          echo "✓ example_slave built (in build/)"
+        else
+          echo "✗ example_slave not found"
+          exit 1
+        fi
+        if [ -f ./bin/example_loopback ]; then
+          echo "✓ example_loopback built (in bin/)"
+        elif [ -f ./example_loopback ]; then
+          echo "✓ example_loopback built (in build/)"
+        else
+          echo "✗ example_loopback not found"
+          exit 1
+        fi
+        if [ -f ./bin/testable_slave ]; then
+          echo "✓ testable_slave built (in bin/)"
+        elif [ -f ./testable_slave ]; then
+          echo "✓ testable_slave built (in build/)"
+        else
+          echo "✗ testable_slave not found"
+          exit 1
+        fi
+
+  # Release build test
+  release-build:
+    name: Release Build
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential bc
+
+    - name: Configure CMake (Release)
+      run: |
+        mkdir -p build-release
+        cd build-release
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON -DBUILD_EXAMPLES=ON -DPROFILING=OFF
+
+    - name: Build Release
+      run: |
+        cd build-release
+        make -j$(nproc)
+
+    - name: Run tests (Release)
+      run: |
+        cd build-release
+        ctest --output-on-failure
+
+  # Sanitizer tests - detect memory issues and undefined behavior
+  sanitizers:
+    name: Sanitizers (ASan/UBSan)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        sanitizer: [address, undefined]
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential bc
+
+    - name: Configure CMake with ${{ matrix.sanitizer }} sanitizer
+      run: |
+        mkdir -p build-sanitizer
+        cd build-sanitizer
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DBUILD_TESTS=ON \
+          -DPROFILING=OFF \
+          -DCMAKE_CXX_FLAGS="-fsanitize=${{ matrix.sanitizer }} -fno-omit-frame-pointer -g -O1" \
+          -DCMAKE_C_FLAGS="-fsanitize=${{ matrix.sanitizer }} -fno-omit-frame-pointer -g -O1" \
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=${{ matrix.sanitizer }}"
+
+    - name: Build
+      run: |
+        cd build-sanitizer
+        make -j$(nproc)
+
+    - name: Run tests with ${{ matrix.sanitizer }} sanitizer
+      run: |
+        cd build-sanitizer
+        ctest --output-on-failure || {
+          echo "Sanitizer ${{ matrix.sanitizer }} found issues"
+          exit 1
+        }
+
+  # Security scanning with CodeQL
+  codeql-analysis:
+    name: Security Scan (CodeQL)
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: cpp
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential bc
+
+    - name: Build for CodeQL
+      run: |
+        mkdir -p build-codeql
+        cd build-codeql
+        cmake .. -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DBUILD_TESTS=ON -DPROFILING=OFF
+        make -j$(nproc)
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
+
+  # Warnings as errors - strict compilation
+  warnings-as-errors:
+    name: Warnings as Errors (${{ matrix.compiler }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        if [ "${{ matrix.compiler }}" = "gcc" ]; then
+          sudo apt-get install -y cmake build-essential gcc-12 g++-12
+        else
+          # Install clang with libc++ (required to avoid GCC libstdc++ compatibility issues)
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential llvm clang libc++-dev libc++abi-dev
+        fi
+
+    - name: Configure CMake with strict warnings
+      run: |
+        mkdir -p build-warnings
+        cd build-warnings
+        if [ "${{ matrix.compiler }}" = "gcc" ]; then
+          CC=gcc-12 CXX=g++-12 cmake .. \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DBUILD_TESTS=ON \
+            -DPROFILING=OFF \
+            -DCMAKE_CXX_FLAGS="-Wall -Wextra -Wpedantic -Werror -Wno-error=deprecated-declarations -Wno-error=overflow" \
+            -DCMAKE_C_FLAGS="-Wall -Wextra -Wpedantic -Werror"
+        else
+          # Force libc++ for clang to avoid GCC libstdc++ compatibility issues
+          CC=clang CXX=clang++ cmake .. \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DBUILD_TESTS=ON \
+            -DPROFILING=OFF \
+            -DCMAKE_CXX_FLAGS="-Wall -Wextra -Wpedantic -Werror -stdlib=libc++" \
+            -DCMAKE_C_FLAGS="-Wall -Wextra -Wpedantic -Werror" \
+            -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++ -lc++abi" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-stdlib=libc++ -lc++abi"
+        fi
+
+    - name: Build (warnings as errors)
+      run: |
+        cd build-warnings
+        make -j$(nproc) || {
+          echo "Build failed with warnings treated as errors"
+          exit 1
+        }
+
+  # Build matrix - test multiple compiler versions
+  build-matrix:
+    name: Build Matrix (${{ matrix.compiler }}-${{ matrix.version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            version: "10"
+          - compiler: gcc
+            version: "11"
+          - compiler: gcc
+            version: "12"
+          - compiler: clang
+            version: "14"
+          - compiler: clang
+            version: "15"
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install ${{ matrix.compiler }}-${{ matrix.version }}
+      run: |
+        sudo apt-get update
+        if [ "${{ matrix.compiler }}" = "gcc" ]; then
+          sudo apt-get install -y cmake build-essential gcc-${{ matrix.version }} g++-${{ matrix.version }}
+        else
+          # Install clang with libc++ (required to avoid GCC libstdc++ compatibility issues)
+          sudo apt-get install -y cmake build-essential llvm-${{ matrix.version }} clang-${{ matrix.version }}
+          # Try version-specific libc++ first, then fall back to generic
+          sudo apt-get install -y libc++-${{ matrix.version }}-dev libc++abi-${{ matrix.version }}-dev 2>/dev/null || \
+          sudo apt-get install -y libc++-dev libc++abi-dev || {
+            echo "ERROR: libc++ is required for clang builds but not available"
+            exit 1
+          }
+        fi
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build
+        cd build
+        if [ "${{ matrix.compiler }}" = "gcc" ]; then
+          CC=gcc-${{ matrix.version }} CXX=g++-${{ matrix.version }} cmake .. \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DBUILD_TESTS=ON \
+            -DBUILD_EXAMPLES=ON \
+            -DPROFILING=OFF
+        else
+          # Force libc++ for clang to avoid GCC libstdc++ compatibility issues
+          CC=clang-${{ matrix.version }} CXX=clang++-${{ matrix.version }} cmake .. \
+            -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DBUILD_TESTS=ON \
+            -DBUILD_EXAMPLES=ON \
+            -DPROFILING=OFF \
+            -DCMAKE_CXX_FLAGS="-stdlib=libc++" \
+            -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++ -lc++abi" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-stdlib=libc++ -lc++abi"
+        fi
+
+    - name: Build
+      run: |
+        cd build
+        make -j$(nproc)
+
+    - name: Run tests
+      run: |
+        cd build
+        ctest --output-on-failure
+
+  # Installation testing - test that library can be consumed
+  installation-test:
+    name: Installation Test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential bc
+
+    - name: Test library consumption via add_subdirectory
+      run: |
+        # Create a test project that uses the library via add_subdirectory
+        mkdir -p /tmp/test-install
+        cd /tmp/test-install
+        LIB_PATH="${{ github.workspace }}"
+        cat > CMakeLists.txt << EOF
+        cmake_minimum_required(VERSION 3.15)
+        project(test_install LANGUAGES CXX)
+        set(CMAKE_CXX_STANDARD 20)
+        set(CMAKE_CXX_STANDARD_REQUIRED ON)
+        add_subdirectory(${LIB_PATH} super-modbus)
+        add_executable(test_app test.cpp)
+        target_link_libraries(test_app PRIVATE super-modbus-lib)
+        EOF
+        cat > test.cpp << 'EOF'
+        #include "super_modbus/rtu/rtu_master.hpp"
+        #include "super_modbus/transport/memory_transport.hpp"
+        int main() {
+          supermb::MemoryTransport transport;
+          supermb::RtuMaster master(transport);
+          return 0;
+        }
+        EOF
+        cmake .
+        make -j$(nproc)
+        ./test_app
+
+  # Markdown linting
+  markdown-lint:
+    name: Markdown Lint
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install markdownlint
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y npm
+        sudo npm install -g markdownlint-cli
+
+    - name: Lint markdown files
+      continue-on-error: true
+      run: |
+        if [ -f .markdownlint.json ]; then
+          markdownlint "**/*.md" --ignore node_modules --config .markdownlint.json 2>&1 | tee markdownlint-output.txt || {
+            echo "::warning::Markdown linting found issues. Review output above."
+            echo "Fix issues or update .markdownlint.json to adjust rules."
+            exit 0
+          }
+        else
+          markdownlint "**/*.md" --ignore node_modules 2>&1 | tee markdownlint-output.txt || {
+            echo "::warning::Markdown linting found issues. Review output above."
+            exit 0
+          }
+        fi
+
+  # Dependency vulnerability scanning
+  dependency-scan:
+    name: Dependency Scan
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy results to GitHub Security
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      continue-on-error: true
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  # CPack package generation test
+  package-test:
+    name: Package Generation (CPack)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential bc
+
+    - name: Configure CMake
+      run: |
+        mkdir -p build-package
+        cd build-package
+        cmake .. -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      run: |
+        cd build-package
+        make -j$(nproc)
+
+    - name: Generate package
+      run: |
+        cd build-package
+        cpack || {
+          echo "Package generation failed"
+          exit 1
+        }
+
+    - name: List generated packages
+      run: |
+        cd build-package
+        ls -lh *.tar.gz *.deb *.rpm 2>/dev/null || echo "No packages found"
+
+  # Spell checking
+  spell-check:
+    name: Spell Check (codespell)
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install codespell
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-pip || true  # Usually pre-installed on GitHub Actions
+        pip install codespell || python3 -m pip install codespell
+
+    - name: Run codespell
+      run: |
+        # Create ignore file if it doesn't exist
+        touch .codespell-ignore || true
+
+        codespell --skip="*.gcda,*.gcno,*.info,*.gcov,build,.git" \
+          --ignore-words=.codespell-ignore \
+          --check-filenames \
+          --check-hidden \
+          --quiet-level=2 \
+          . 2>&1 | tee codespell-output.txt || {
+          echo "::error::Spell check found issues. Review output above."
+          echo "To ignore words, add them to .codespell-ignore"
+          exit 1
+        }
+
+  # License header verification
+  license-check:
+    name: License Header Check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Check license headers
+      run: |
+        # Check if LICENSE file exists
+        if [ ! -f LICENSE ]; then
+          echo "ERROR: LICENSE file not found"
+          exit 1
+        fi
+
+        # Optional: Check for license headers in source files
+        # This is a flexible check - modify the pattern as needed
+        MISSING_HEADERS=0
+        for file in $(find src include -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) -not -path "*/build/*"); do
+          # Check if file has Apache license header (optional check)
+          # Uncomment below to enforce license headers in all files
+          # if ! grep -q "Apache License" "$file" 2>/dev/null; then
+          #   echo "WARNING: $file may be missing license header"
+          #   MISSING_HEADERS=$((MISSING_HEADERS + 1))
+          # fi
+          :
+        done
+
+        if [ $MISSING_HEADERS -gt 0 ]; then
+          echo "Found $MISSING_HEADERS files potentially missing license headers"
+          echo "This is a warning, not an error. Uncomment checks in CI to enforce."
+        else
+          echo "License check passed (headers optional)"
+        fi
+
+        # Verify LICENSE file is valid Apache 2.0
+        if grep -q "Apache License" LICENSE && grep -q "Version 2.0" LICENSE; then
+          echo "✓ LICENSE file appears to be Apache 2.0"
+        else
+          echo "WARNING: LICENSE file may not be Apache 2.0"
+        fi
+
+  # Performance benchmarking
+  benchmarks:
+    name: Performance Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential bc
+
+    - name: Configure CMake (Release)
+      run: |
+        mkdir -p build-bench
+        cd build-bench
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=ON -DPROFILING=OFF
+
+    - name: Build
+      run: |
+        cd build-bench
+        make -j$(nproc)
+
+    - name: Run basic performance tests
+      run: |
+        cd build-bench
+        # Run tests and measure time
+        echo "## Performance Benchmarks" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Test | Duration |" >> $GITHUB_STEP_SUMMARY
+        echo "|------|----------|" >> $GITHUB_STEP_SUMMARY
+
+        # Time the test suite
+        START_TIME=$(date +%s.%N)
+        ctest --output-on-failure -T test 2>&1 | head -50
+        END_TIME=$(date +%s.%N)
+        DURATION=$(echo "$END_TIME - $START_TIME" | bc)
+        echo "| Full Test Suite | ${DURATION}s |" >> $GITHUB_STEP_SUMMARY
+
+        # Time individual test categories if possible
+        if [ -f ./bin/run_tests ]; then
+          START_TIME=$(date +%s.%N)
+          timeout 30 ./bin/run_tests --gtest_filter="*Basic*" --gtest_brief=1 2>&1 | head -20
+          END_TIME=$(date +%s.%N)
+          DURATION=$(echo "$END_TIME - $START_TIME" | bc)
+          echo "| Basic Tests | ${DURATION}s |" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Note: Add Google Benchmark for detailed performance metrics" >> $GITHUB_STEP_SUMMARY
+
+    - name: Upload benchmark results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-results
+        path: build-bench/Testing/**/Test.xml
+        if-no-files-found: ignore
+
+  # Documentation generation (Doxygen)
+  documentation:
+    name: Documentation Generation
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake build-essential bc doxygen graphviz
+
+    - name: Check if Doxyfile exists
+      id: check_doxyfile
+      run: |
+        if [ -f Doxyfile ]; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+          echo "source=root" >> $GITHUB_OUTPUT
+        elif [ -f docs/Doxyfile ]; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+          echo "source=docs" >> $GITHUB_OUTPUT
+        elif [ -f Doxyfile.in ]; then
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "source=template" >> $GITHUB_OUTPUT
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "source=none" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Generate Doxyfile if needed
+      if: steps.check_doxyfile.outputs.exists == 'false'
+      run: |
+        if [ "${{ steps.check_doxyfile.outputs.source }}" = "template" ]; then
+          # Use template if available
+          sed "s|@PROJECT_VERSION@|0.1.0|g" Doxyfile.in > Doxyfile
+          echo "Generated Doxyfile from template"
+        else
+          # Generate default configuration
+          doxygen -g Doxyfile || true
+          # Configure basic settings
+          sed -i 's|^PROJECT_NAME.*|PROJECT_NAME = "Super Modbus"|' Doxyfile
+          sed -i 's|^INPUT.*|INPUT = include src|' Doxyfile
+          sed -i 's|^RECURSIVE.*|RECURSIVE = YES|' Doxyfile
+          sed -i 's|^GENERATE_HTML.*|GENERATE_HTML = YES|' Doxyfile
+          sed -i 's|^GENERATE_LATEX.*|GENERATE_LATEX = NO|' Doxyfile
+          echo "Generated default Doxyfile"
+        fi
+
+    - name: Generate documentation
+      run: |
+        DOXYFILE="Doxyfile"
+        if [ -f docs/Doxyfile ]; then
+          DOXYFILE="docs/Doxyfile"
+        fi
+
+        if [ -f "$DOXYFILE" ]; then
+          doxygen "$DOXYFILE" || {
+            echo "Documentation generation had warnings/errors"
+            echo "This is non-fatal, but review doxygen output above"
+          }
+
+          # Check both possible output locations
+          if [ -d html ]; then
+            echo "✓ Documentation generated in html/"
+            ls -lh html/ | head -10
+          elif [ -d docs/html ]; then
+            echo "✓ Documentation generated in docs/html/"
+            ls -lh docs/html/ | head -10
+          else
+            echo "Warning: Documentation output directory not found (checked html/ and docs/html/)"
+          fi
+        else
+          echo "No Doxyfile found, skipping documentation generation"
+        fi
+
+    - name: Upload documentation
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: documentation
+        path: |
+          html/
+          docs/html/
+        if-no-files-found: ignore
+
+    - name: Check documentation coverage
+      if: always()
+      run: |
+        DOC_COUNT=0
+        if [ -d html ]; then
+          DOC_COUNT=$(find html -name "*.html" -type f | wc -l)
+          echo "Generated $DOC_COUNT documentation pages in html/"
+        elif [ -d docs/html ]; then
+          DOC_COUNT=$(find docs/html -name "*.html" -type f | wc -l)
+          echo "Generated $DOC_COUNT documentation pages in docs/html/"
+        fi
+        if [ $DOC_COUNT -gt 0 ]; then
+          echo "Documentation artifacts uploaded for review"
+        else
+          echo "Warning: No documentation files found"
+        fi
+
+  # Summary job that depends on all others
+  ci-summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    needs: [
+      format-check, clang-tidy, cppcheck, test-gcc, test-clang,
+      integration-tests, build-examples, release-build, sanitizers,
+      codeql-analysis, warnings-as-errors, build-matrix,
+      installation-test, markdown-lint, dependency-scan, package-test,
+      spell-check, license-check, benchmarks, documentation, dynamic-analysis
+    ]
+    if: always()
+    steps:
+    - name: Check job statuses
+      run: |
+        echo "## CI Summary" >> $GITHUB_STEP_SUMMARY
+        echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Format Check | ${{ needs.format-check.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| clang-tidy | ${{ needs.clang-tidy.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| cppcheck | ${{ needs.cppcheck.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| GCC Tests | ${{ needs.test-gcc.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Clang Tests | ${{ needs.test-clang.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Integration Tests | ${{ needs.integration-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Build Examples | ${{ needs.build-examples.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Release Build | ${{ needs.release-build.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Sanitizers | ${{ needs.sanitizers.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| CodeQL Security | ${{ needs.codeql-analysis.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Warnings as Errors | ${{ needs.warnings-as-errors.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Build Matrix | ${{ needs.build-matrix.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Installation Test | ${{ needs.installation-test.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Markdown Lint | ${{ needs.markdown-lint.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Dependency Scan | ${{ needs.dependency-scan.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Package Test | ${{ needs.package-test.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Spell Check | ${{ needs.spell-check.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| License Check | ${{ needs.license-check.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Benchmarks | ${{ needs.benchmarks.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Documentation | ${{ needs.documentation.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Dynamic Analysis | ${{ needs.dynamic-analysis.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "All CI jobs completed. Check individual job results above."

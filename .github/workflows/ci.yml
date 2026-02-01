@@ -31,7 +31,7 @@ jobs:
         ls -la .clang-format || echo ".clang-format not found!"
         clang-format --version
         echo "Dumping config to verify .clang-format is being used:"
-        clang-format --style=file --dump-config | head -10 || echo "Failed to dump config"
+        clang-format --style=file --dump-config || echo "Failed to dump config"
 
         FAILED_FILES=()
         while IFS= read -r file; do

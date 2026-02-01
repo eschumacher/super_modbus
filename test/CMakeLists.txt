@@ -24,6 +24,11 @@ add_executable(run_tests
     rtu/test_broadcast.cpp
     rtu/test_fifo_queue.cpp
     rtu/test_event_log.cpp
+    rtu/test_rtu_frame_edge_cases.cpp
+    rtu/test_rtu_request_edge_cases.cpp
+    common/test_common_utilities.cpp
+    common/test_crc16.cpp
+    transport/test_memory_transport.cpp
 )
 
 target_link_libraries(run_tests PRIVATE

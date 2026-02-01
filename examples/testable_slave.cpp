@@ -24,14 +24,14 @@
 #include "super_modbus/transport/memory_transport.hpp"
 
 // Global flag for graceful shutdown
-bool volatile g_running = true;
+volatile bool g_running = true;
 
 void signal_handler(int signal) {
   (void)signal;
   g_running = false;
 }
 
-int main(int argc, char const *argv[]) {
+int main(int argc, const char *argv[]) {
   using supermb::AddressSpan;
   using supermb::MemoryTransport;
   using supermb::RtuSlave;
@@ -55,7 +55,7 @@ int main(int argc, char const *argv[]) {
     return 1;
   }
 
-  char const *port = argv[1];
+  const char *port = argv[1];
   int baud_rate = (argc >= 3) ? std::atoi(argv[2]) : 9600;
   uint8_t slave_id = (argc >= 4) ? static_cast<uint8_t>(std::atoi(argv[3])) : 1;
 

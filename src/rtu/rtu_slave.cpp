@@ -49,7 +49,7 @@ constexpr size_t kFileRecordReadRecordNumberOffset = 2;
 constexpr size_t kFileRecordReadRecordLengthOffset = 4;
 }  // namespace
 
-RtuResponse RtuSlave::Process(RtuRequest const &request) {
+RtuResponse RtuSlave::Process(const RtuRequest &request) {
   // Increment communication event counter and add to log
   ++com_event_counter_;
   ++message_count_;
@@ -158,10 +158,10 @@ void RtuSlave::AddDiscreteInputs(AddressSpan span) {
   discrete_inputs_.AddAddressSpan(span);
 }
 
-void RtuSlave::ProcessReadRegisters(AddressMap<int16_t> const &address_map, RtuRequest const &request,
+void RtuSlave::ProcessReadRegisters(const AddressMap<int16_t> &address_map, const RtuRequest &request,
                                     RtuResponse &response) {
   bool exception_hit = false;
-  auto const maybe_address_span = request.GetAddressSpan();
+  const auto maybe_address_span = request.GetAddressSpan();
   if (!maybe_address_span.has_value()) {
     // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);  // likely a library defect if hit - create ticket in github
@@ -169,13 +169,13 @@ void RtuSlave::ProcessReadRegisters(AddressMap<int16_t> const &address_map, RtuR
     return;
   }
 
-  AddressSpan const &address_span = maybe_address_span.value();
+  const AddressSpan &address_span = maybe_address_span.value();
   // Calculate byte count (2 bytes per register)
   auto byte_count = static_cast<uint8_t>(address_span.reg_count * 2);
   response.EmplaceBack(byte_count);
 
   for (int i = 0; i < address_span.reg_count; ++i) {
-    auto const reg_value = address_map[address_span.start_address + i];
+    const auto reg_value = address_map[address_span.start_address + i];
     if (reg_value.has_value()) {
       // Modbus RTU uses big-endian: high byte first, then low byte
       response.EmplaceBack(GetHighByte(reg_value.value()));
@@ -191,7 +191,7 @@ void RtuSlave::ProcessReadRegisters(AddressMap<int16_t> const &address_map, RtuR
   }
 }
 
-void RtuSlave::ProcessWriteSingleRegister(AddressMap<int16_t> &address_map, RtuRequest const &request,
+void RtuSlave::ProcessWriteSingleRegister(AddressMap<int16_t> &address_map, const RtuRequest &request,
                                           RtuResponse &response) {
   if (request.GetData().size() < 4) {
     response.SetExceptionCode(ExceptionCode::kIllegalFunction);
@@ -201,7 +201,7 @@ void RtuSlave::ProcessWriteSingleRegister(AddressMap<int16_t> &address_map, RtuR
   // SetWriteSingleRegisterData writes: [high_addr, low_addr, high_val, low_val]
   // Modbus uses low-byte-first, so we need to read as MakeInt16(low_byte, high_byte)
   // For [high, low] in data, we need MakeInt16(data[1], data[0])
-  uint16_t const address = MakeInt16(request.GetData()[1], request.GetData()[0]);
+  const uint16_t address = MakeInt16(request.GetData()[1], request.GetData()[0]);
   int16_t new_value = MakeInt16(request.GetData()[3], request.GetData()[2]);
   if (address_map[address].has_value()) {
     address_map.Set(address, new_value);
@@ -217,9 +217,9 @@ void RtuSlave::ProcessWriteSingleRegister(AddressMap<int16_t> &address_map, RtuR
   }
 }
 
-void RtuSlave::ProcessReadCoils(AddressMap<bool> const &address_map, RtuRequest const &request, RtuResponse &response) {
+void RtuSlave::ProcessReadCoils(const AddressMap<bool> &address_map, const RtuRequest &request, RtuResponse &response) {
   bool exception_hit = false;
-  auto const maybe_address_span = request.GetAddressSpan();
+  const auto maybe_address_span = request.GetAddressSpan();
   if (!maybe_address_span.has_value()) {
     // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-array-to-pointer-decay)
     assert(false);  // likely a library defect if hit - create ticket in github
@@ -227,7 +227,7 @@ void RtuSlave::ProcessReadCoils(AddressMap<bool> const &address_map, RtuRequest 
     return;
   }
 
-  AddressSpan const &address_span = maybe_address_span.value();
+  const AddressSpan &address_span = maybe_address_span.value();
 
   // Calculate number of bytes needed (8 coils per byte, rounded up)
   auto byte_count =
@@ -238,7 +238,7 @@ void RtuSlave::ProcessReadCoils(AddressMap<bool> const &address_map, RtuRequest 
   uint8_t bit_position = 0;
 
   for (int i = 0; i < address_span.reg_count; ++i) {
-    auto const coil_value = address_map[address_span.start_address + i];
+    const auto coil_value = address_map[address_span.start_address + i];
     if (coil_value.has_value()) {
       if (coil_value.value()) {
         current_byte |= (1 << bit_position);
@@ -263,14 +263,14 @@ void RtuSlave::ProcessReadCoils(AddressMap<bool> const &address_map, RtuRequest 
   }
 }
 
-void RtuSlave::ProcessWriteSingleCoil(AddressMap<bool> &address_map, RtuRequest const &request, RtuResponse &response) {
+void RtuSlave::ProcessWriteSingleCoil(AddressMap<bool> &address_map, const RtuRequest &request, RtuResponse &response) {
   if (request.GetData().size() < 4) {
     response.SetExceptionCode(ExceptionCode::kIllegalFunction);
     return;
   }
 
-  uint16_t const address = MakeInt16(request.GetData()[1], request.GetData()[0]);
-  uint16_t const value = MakeInt16(request.GetData()[3], request.GetData()[2]);
+  const uint16_t address = MakeInt16(request.GetData()[1], request.GetData()[0]);
+  const uint16_t value = MakeInt16(request.GetData()[3], request.GetData()[2]);
 
   // Modbus spec: 0x0000 = OFF, 0xFF00 = ON
   bool coil_value = (value == supermb::kCoilOnValue);
@@ -289,9 +289,9 @@ void RtuSlave::ProcessWriteSingleCoil(AddressMap<bool> &address_map, RtuRequest 
   }
 }
 
-void RtuSlave::ProcessWriteMultipleRegisters(AddressMap<int16_t> &address_map, RtuRequest const &request,
+void RtuSlave::ProcessWriteMultipleRegisters(AddressMap<int16_t> &address_map, const RtuRequest &request,
                                              RtuResponse &response) {
-  auto const &data = request.GetData();
+  const auto &data = request.GetData();
 
   // Data format: address (2), count (2), byte_count (1), values (count * 2)
   if (data.size() < kMinWriteDataSize) {
@@ -338,9 +338,9 @@ void RtuSlave::ProcessWriteMultipleRegisters(AddressMap<int16_t> &address_map, R
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessWriteMultipleCoils(AddressMap<bool> &address_map, RtuRequest const &request,
+void RtuSlave::ProcessWriteMultipleCoils(AddressMap<bool> &address_map, const RtuRequest &request,
                                          RtuResponse &response) {
-  auto const &data = request.GetData();
+  const auto &data = request.GetData();
 
   // Data format: address (2), count (2), byte_count (1), coil values (packed)
   if (data.size() < kMinWriteDataSize) {
@@ -395,7 +395,7 @@ bool RtuSlave::ProcessIncomingFrame(ByteTransport &transport, uint32_t timeout_m
   }
 
   // Decode the request frame
-  auto request = RtuFrame::DecodeRequest(std::span<uint8_t const>(frame->data(), frame->size()));
+  auto request = RtuFrame::DecodeRequest(std::span<const uint8_t>(frame->data(), frame->size()));
   if (!request.has_value()) {
     return false;  // Invalid frame
   }
@@ -435,7 +435,7 @@ bool RtuSlave::ProcessIncomingFrame(ByteTransport &transport, uint32_t timeout_m
 
   // Encode and send response for non-broadcast messages
   std::vector<uint8_t> response_frame = RtuFrame::EncodeResponse(response);
-  int bytes_written = transport.Write(std::span<uint8_t const>(response_frame.data(), response_frame.size()));
+  int bytes_written = transport.Write(std::span<const uint8_t>(response_frame.data(), response_frame.size()));
   if (bytes_written != static_cast<int>(response_frame.size())) {
     return false;
   }
@@ -454,17 +454,17 @@ bool RtuSlave::Poll(ByteTransport &transport) {
   return ProcessIncomingFrame(transport, kDefaultPollTimeoutMs);
 }
 
-void RtuSlave::ProcessReadExceptionStatus(RtuRequest const & /*request*/, RtuResponse &response) const {
+void RtuSlave::ProcessReadExceptionStatus(const RtuRequest & /*request*/, RtuResponse &response) const {
   // FC 7: Read Exception Status - Returns 1 byte exception status
   // For simplicity, we'll return a configurable exception status byte
   response.EmplaceBack(exception_status_);
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessDiagnostics(RtuRequest const &request, RtuResponse &response) {
+void RtuSlave::ProcessDiagnostics(const RtuRequest &request, RtuResponse &response) {
   // FC 8: Diagnostics - Sub-function code based
   // Returns the data sent in the request (echo)
-  auto const &data = request.GetData();
+  const auto &data = request.GetData();
   if (data.size() < 2) {
     response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
     return;
@@ -477,7 +477,7 @@ void RtuSlave::ProcessDiagnostics(RtuRequest const &request, RtuResponse &respon
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessGetComEventCounter(RtuRequest const & /*request*/, RtuResponse &response) const {
+void RtuSlave::ProcessGetComEventCounter(const RtuRequest & /*request*/, RtuResponse &response) const {
   // FC 11: Get Com Event Counter - Returns 2 bytes: status (1) + event count (2)
   response.EmplaceBack(0x00);  // Status: 0x00 = no error, 0xFF = error
   response.EmplaceBack(GetLowByte(com_event_counter_));
@@ -485,7 +485,7 @@ void RtuSlave::ProcessGetComEventCounter(RtuRequest const & /*request*/, RtuResp
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessGetComEventLog(RtuRequest const & /*request*/, RtuResponse &response) const {
+void RtuSlave::ProcessGetComEventLog(const RtuRequest & /*request*/, RtuResponse &response) const {
   // FC 12: Get Com Event Log - Returns status, event count, message count, and events
   response.EmplaceBack(0x00);  // Status (0x00 = no error, kMaxByteValue = error)
   response.EmplaceBack(GetLowByte(com_event_counter_));
@@ -496,7 +496,7 @@ void RtuSlave::ProcessGetComEventLog(RtuRequest const & /*request*/, RtuResponse
   // Add event log entries (up to kComEventLogMaxSize events max per Modbus spec)
   size_t event_count = std::min(com_event_log_.size(), size_t{kComEventLogMaxSize});
   for (size_t i = 0; i < event_count; ++i) {
-    auto const &entry = com_event_log_[i];
+    const auto &entry = com_event_log_[i];
     response.EmplaceBack(GetLowByte(entry.event_id));
     response.EmplaceBack(GetHighByte(entry.event_id));
     response.EmplaceBack(GetLowByte(entry.event_count));
@@ -506,7 +506,7 @@ void RtuSlave::ProcessGetComEventLog(RtuRequest const & /*request*/, RtuResponse
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessReportSlaveID(RtuRequest const & /*request*/, RtuResponse &response) const {
+void RtuSlave::ProcessReportSlaveID(const RtuRequest & /*request*/, RtuResponse &response) const {
   // FC 17: Report Slave ID - Returns slave ID, run indicator, and additional data
   response.EmplaceBack(id_);            // Slave ID
   response.EmplaceBack(kMaxByteValue);  // Run indicator (kMaxByteValue = run, 0x00 = stop)
@@ -514,10 +514,10 @@ void RtuSlave::ProcessReportSlaveID(RtuRequest const & /*request*/, RtuResponse 
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessReadFileRecord(RtuRequest const &request, RtuResponse &response) const {
+void RtuSlave::ProcessReadFileRecord(const RtuRequest &request, RtuResponse &response) const {
   // FC 20: Read File Record - Read records from files
   // Request format: byte_count (1) + [file_number (2) + record_number (2) + record_length (2)] * N
-  auto const &data = request.GetData();
+  const auto &data = request.GetData();
   if (data.empty()) {
     response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
     return;
@@ -587,11 +587,11 @@ void RtuSlave::ProcessReadFileRecord(RtuRequest const &request, RtuResponse &res
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessWriteFileRecord(RtuRequest const &request, RtuResponse &response) {
+void RtuSlave::ProcessWriteFileRecord(const RtuRequest &request, RtuResponse &response) {
   // FC 21: Write File Record - Write records to files
   // Request format: byte_count (1) + [reference_type (1) + file_number (2) + record_number (2) + record_length (2) +
   // record_data (N*2)] * N
-  auto const &data = request.GetData();
+  const auto &data = request.GetData();
   if (data.empty()) {
     response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
     return;
@@ -650,10 +650,10 @@ void RtuSlave::ProcessWriteFileRecord(RtuRequest const &request, RtuResponse &re
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessMaskWriteRegister(AddressMap<int16_t> &address_map, RtuRequest const &request,
+void RtuSlave::ProcessMaskWriteRegister(AddressMap<int16_t> &address_map, const RtuRequest &request,
                                         RtuResponse &response) {
   // FC 22: Mask Write Register - Write with AND mask and OR mask
-  auto const &data = request.GetData();
+  const auto &data = request.GetData();
   if (data.size() < kMinMaskWriteDataSize) {
     response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
     return;
@@ -684,10 +684,10 @@ void RtuSlave::ProcessMaskWriteRegister(AddressMap<int16_t> &address_map, RtuReq
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessReadWriteMultipleRegisters(AddressMap<int16_t> &address_map, RtuRequest const &request,
+void RtuSlave::ProcessReadWriteMultipleRegisters(AddressMap<int16_t> &address_map, const RtuRequest &request,
                                                  RtuResponse &response) {
   // FC 23: Read/Write Multiple Registers - Read from one area, write to another
-  auto const &data = request.GetData();
+  const auto &data = request.GetData();
   if (data.size() < kMinReadWriteDataSize) {
     response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
     return;
@@ -740,9 +740,9 @@ void RtuSlave::ProcessReadWriteMultipleRegisters(AddressMap<int16_t> &address_ma
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessReadFIFOQueue(RtuRequest const &request, RtuResponse &response) const {
+void RtuSlave::ProcessReadFIFOQueue(const RtuRequest &request, RtuResponse &response) const {
   // FC 24: Read FIFO Queue - Read from FIFO queue at specified address
-  auto const &data = request.GetData();
+  const auto &data = request.GetData();
   if (data.size() < 2) {
     response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
     return;
@@ -757,7 +757,7 @@ void RtuSlave::ProcessReadFIFOQueue(RtuRequest const &request, RtuResponse &resp
     return;
   }
 
-  FIFOQueue const &fifo_queue = fifo_it->second;
+  const FIFOQueue &fifo_queue = fifo_it->second;
   auto fifo_count = static_cast<uint16_t>(fifo_queue.size());
   uint16_t byte_count = fifo_count * 2;  // Each register is 2 bytes
 
@@ -805,13 +805,13 @@ std::optional<std::vector<uint8_t>> RtuSlave::ReadFrame(ByteReader &transport, u
       frame_started = true;
 
       // Check if we have a complete frame (slave reads requests)
-      std::span<uint8_t const> frame_span(buffer.data(), buffer.size());
+      std::span<const uint8_t> frame_span(buffer.data(), buffer.size());
       if (RtuFrame::IsRequestFrameComplete(frame_span)) {
         return buffer;
       }
     } else if (frame_started && bytes_read == 0) {
       // Frame started but no more data available - might be complete (slave reads requests)
-      std::span<uint8_t const> frame_span(buffer.data(), buffer.size());
+      std::span<const uint8_t> frame_span(buffer.data(), buffer.size());
       if (RtuFrame::IsRequestFrameComplete(frame_span)) {
         return buffer;
       }

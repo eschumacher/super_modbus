@@ -133,7 +133,7 @@ TEST(Broadcast, MasterWriteMultipleCoils_Broadcast) {
   std::vector<bool> values{true, false, true, false};
   // Convert vector<bool> to regular bool array for span
   bool bool_array[4] = {values[0], values[1], values[2], values[3]};
-  bool result = sim.GetMaster().WriteMultipleCoils(kBroadcastId, 0, std::span<bool const>(bool_array));
+  bool result = sim.GetMaster().WriteMultipleCoils(kBroadcastId, 0, std::span<const bool>(bool_array));
 
   EXPECT_TRUE(result);
 

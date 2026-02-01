@@ -124,7 +124,7 @@ int main() {
   // Convert vector<bool> to regular bool array for span
   bool bool_array[8] = {coil_values[0], coil_values[1], coil_values[2], coil_values[3],
                         coil_values[4], coil_values[5], coil_values[6], coil_values[7]};
-  success = master.WriteMultipleCoils(1, 0, std::span<bool const>(bool_array));
+  success = master.WriteMultipleCoils(1, 0, std::span<const bool>(bool_array));
   simulate_communication();
   if (success) {
     std::cout << "  Write successful!\n";

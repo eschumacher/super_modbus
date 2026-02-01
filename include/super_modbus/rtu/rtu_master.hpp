@@ -12,7 +12,7 @@
 namespace std {
 template <>
 struct hash<std::pair<uint16_t, uint16_t>> {
-  size_t operator()(std::pair<uint16_t, uint16_t> const &p) const noexcept {
+  size_t operator()(const std::pair<uint16_t, uint16_t> &p) const noexcept {
     // Combine both values into a single hash
     // Using a simple hash combination: hash(first) ^ (hash(second) << 1)
     return std::hash<uint16_t>{}(p.first) ^ (std::hash<uint16_t>{}(p.second) << 1);
@@ -110,7 +110,7 @@ class RtuMaster {
    * @param values Register values to write
    * @return true on success, false on error
    */
-  [[nodiscard]] bool WriteMultipleRegisters(uint8_t slave_id, uint16_t start_address, std::span<int16_t const> values);
+  [[nodiscard]] bool WriteMultipleRegisters(uint8_t slave_id, uint16_t start_address, std::span<const int16_t> values);
 
   /**
    * @brief Write multiple coils
@@ -119,7 +119,7 @@ class RtuMaster {
    * @param values Coil values to write
    * @return true on success, false on error
    */
-  [[nodiscard]] bool WriteMultipleCoils(uint8_t slave_id, uint16_t start_address, std::span<bool const> values);
+  [[nodiscard]] bool WriteMultipleCoils(uint8_t slave_id, uint16_t start_address, std::span<const bool> values);
 
   /**
    * @brief Read exception status (FC 7)
@@ -136,7 +136,7 @@ class RtuMaster {
    * @return Response data, or empty if error
    */
   [[nodiscard]] std::optional<std::vector<uint8_t>> Diagnostics(uint8_t slave_id, uint16_t sub_function_code,
-                                                                std::span<uint8_t const> data);
+                                                                std::span<const uint8_t> data);
 
   /**
    * @brief Get communication event counter (FC 11)
@@ -181,7 +181,7 @@ class RtuMaster {
   [[nodiscard]] std::optional<std::vector<int16_t>> ReadWriteMultipleRegisters(uint8_t slave_id, uint16_t read_start,
                                                                                uint16_t read_count,
                                                                                uint16_t write_start,
-                                                                               std::span<int16_t const> write_values);
+                                                                               std::span<const int16_t> write_values);
 
   /**
    * @brief Read FIFO queue (FC 24)
@@ -198,7 +198,7 @@ class RtuMaster {
    * @return Map of (file_number, record_number) -> record_data, or empty if error
    */
   [[nodiscard]] std::optional<std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int16_t>>> ReadFileRecord(
-      uint8_t slave_id, std::span<std::tuple<uint16_t, uint16_t, uint16_t> const> file_records);
+      uint8_t slave_id, std::span<const std::tuple<uint16_t, uint16_t, uint16_t>> file_records);
 
   /**
    * @brief Write file record (FC 21)
@@ -207,7 +207,7 @@ class RtuMaster {
    * @return true on success, false on error
    */
   [[nodiscard]] bool WriteFileRecord(
-      uint8_t slave_id, std::span<std::tuple<uint16_t, uint16_t, std::vector<int16_t>> const> file_records);
+      uint8_t slave_id, std::span<const std::tuple<uint16_t, uint16_t, std::vector<int16_t>>> file_records);
 
   /**
    * @brief Send a custom request and receive response
@@ -215,7 +215,7 @@ class RtuMaster {
    * @param timeout_ms Timeout in milliseconds (0 = no timeout)
    * @return Response if successful, empty optional on error/timeout
    */
-  [[nodiscard]] std::optional<RtuResponse> SendRequest(RtuRequest const &request, uint32_t timeout_ms = 1000);
+  [[nodiscard]] std::optional<RtuResponse> SendRequest(const RtuRequest &request, uint32_t timeout_ms = 1000);
 
   /**
    * @brief Receive a response frame

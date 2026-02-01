@@ -38,7 +38,7 @@ class MemoryTransport : public ByteTransport {
   [[nodiscard]] size_t AvailableBytes() const override { return read_buffer_.size() - read_pos_; }
 
   // ByteWriter interface
-  [[nodiscard]] int Write(std::span<uint8_t const> data) override {
+  [[nodiscard]] int Write(std::span<const uint8_t> data) override {
     write_buffer_.insert(write_buffer_.end(), data.begin(), data.end());
     return static_cast<int>(data.size());
   }
@@ -49,7 +49,7 @@ class MemoryTransport : public ByteTransport {
   /**
    * @brief Set the data that will be read by Read()
    */
-  void SetReadData(std::span<uint8_t const> data) {
+  void SetReadData(std::span<const uint8_t> data) {
     read_buffer_.assign(data.begin(), data.end());
     read_pos_ = 0;
   }
@@ -57,8 +57,8 @@ class MemoryTransport : public ByteTransport {
   /**
    * @brief Get the data that was written via Write()
    */
-  [[nodiscard]] std::span<uint8_t const> GetWrittenData() const {
-    return std::span<uint8_t const>(write_buffer_.data(), write_buffer_.size());
+  [[nodiscard]] std::span<const uint8_t> GetWrittenData() const {
+    return std::span<const uint8_t>(write_buffer_.data(), write_buffer_.size());
   }
 
   /**

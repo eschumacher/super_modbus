@@ -24,28 +24,28 @@ class RtuFrame {
    * @param request The Modbus request to encode
    * @return Byte vector containing the complete RTU frame (slave_id, function_code, data, CRC)
    */
-  [[nodiscard]] static std::vector<uint8_t> EncodeRequest(RtuRequest const &request);
+  [[nodiscard]] static std::vector<uint8_t> EncodeRequest(const RtuRequest &request);
 
   /**
    * @brief Encode a response into an RTU frame with CRC
    * @param response The Modbus response to encode
    * @return Byte vector containing the complete RTU frame (slave_id, function_code, data, CRC)
    */
-  [[nodiscard]] static std::vector<uint8_t> EncodeResponse(RtuResponse const &response);
+  [[nodiscard]] static std::vector<uint8_t> EncodeResponse(const RtuResponse &response);
 
   /**
    * @brief Decode an RTU frame into a request
    * @param frame Complete RTU frame including CRC
    * @return Parsed request if frame is valid, empty optional otherwise
    */
-  [[nodiscard]] static std::optional<RtuRequest> DecodeRequest(std::span<uint8_t const> frame);
+  [[nodiscard]] static std::optional<RtuRequest> DecodeRequest(std::span<const uint8_t> frame);
 
   /**
    * @brief Decode an RTU frame into a response
    * @param frame Complete RTU frame including CRC
    * @return Parsed response if frame is valid, empty optional otherwise
    */
-  [[nodiscard]] static std::optional<RtuResponse> DecodeResponse(std::span<uint8_t const> frame);
+  [[nodiscard]] static std::optional<RtuResponse> DecodeResponse(std::span<const uint8_t> frame);
 
   /**
    * @brief Get the minimum frame size for a given function code
@@ -59,14 +59,14 @@ class RtuFrame {
    * @param frame Partial or complete frame
    * @return true if frame has minimum size for a request, false otherwise
    */
-  [[nodiscard]] static bool IsRequestFrameComplete(std::span<uint8_t const> frame);
+  [[nodiscard]] static bool IsRequestFrameComplete(std::span<const uint8_t> frame);
 
   /**
    * @brief Check if a response frame appears complete
    * @param frame Partial or complete frame
    * @return true if frame has minimum size for a response, false otherwise
    */
-  [[nodiscard]] static bool IsResponseFrameComplete(std::span<uint8_t const> frame);
+  [[nodiscard]] static bool IsResponseFrameComplete(std::span<const uint8_t> frame);
 
   /**
    * @brief Check if a frame appears complete (has minimum size)
@@ -74,7 +74,7 @@ class RtuFrame {
    * @param frame Partial or complete frame
    * @return true if frame has minimum size, false otherwise
    */
-  [[nodiscard]] static bool IsFrameComplete(std::span<uint8_t const> frame);
+  [[nodiscard]] static bool IsFrameComplete(std::span<const uint8_t> frame);
 
  private:
   static constexpr size_t kMinFrameSize = 4;  // slave_id + function_code + CRC (2 bytes)

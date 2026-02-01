@@ -82,7 +82,7 @@ int main() {
   std::vector<bool> coil_values{true, false, true, false, true};
   // Convert vector<bool> to regular bool array for span
   bool bool_array[5] = {coil_values[0], coil_values[1], coil_values[2], coil_values[3], coil_values[4]};
-  success = master.WriteMultipleCoils(1, 0, std::span<bool const>(bool_array));
+  success = master.WriteMultipleCoils(1, 0, std::span<const bool>(bool_array));
   if (success) {
     std::cout << "  Successfully wrote " << coil_values.size() << " coils\n";
   }

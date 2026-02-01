@@ -29,7 +29,7 @@ class RtuSlave {
    * @param request The request to process
    * @return Response to the request
    */
-  RtuResponse Process(RtuRequest const &request);
+  RtuResponse Process(const RtuRequest &request);
 
   /**
    * @brief Process incoming frame from transport and send response
@@ -56,7 +56,7 @@ class RtuSlave {
    * @param fifo_address FIFO address
    * @param queue_data Queue data (vector of register values)
    */
-  void SetFIFOQueue(uint16_t fifo_address, std::vector<int16_t> const &queue_data) {
+  void SetFIFOQueue(uint16_t fifo_address, const std::vector<int16_t> &queue_data) {
     fifo_storage_[fifo_address] = queue_data;
   }
 
@@ -70,28 +70,28 @@ class RtuSlave {
   [[nodiscard]] static std::optional<std::vector<uint8_t>> ReadFrame(ByteReader &transport,
                                                                      uint32_t timeout_ms = kDefaultFrameTimeoutMs);
 
-  static void ProcessReadRegisters(AddressMap<int16_t> const &address_map, RtuRequest const &request,
+  static void ProcessReadRegisters(const AddressMap<int16_t> &address_map, const RtuRequest &request,
                                    RtuResponse &response);
-  static void ProcessWriteSingleRegister(AddressMap<int16_t> &address_map, RtuRequest const &request,
+  static void ProcessWriteSingleRegister(AddressMap<int16_t> &address_map, const RtuRequest &request,
                                          RtuResponse &response);
-  static void ProcessReadCoils(AddressMap<bool> const &address_map, RtuRequest const &request, RtuResponse &response);
-  static void ProcessWriteSingleCoil(AddressMap<bool> &address_map, RtuRequest const &request, RtuResponse &response);
-  static void ProcessWriteMultipleRegisters(AddressMap<int16_t> &address_map, RtuRequest const &request,
+  static void ProcessReadCoils(const AddressMap<bool> &address_map, const RtuRequest &request, RtuResponse &response);
+  static void ProcessWriteSingleCoil(AddressMap<bool> &address_map, const RtuRequest &request, RtuResponse &response);
+  static void ProcessWriteMultipleRegisters(AddressMap<int16_t> &address_map, const RtuRequest &request,
                                             RtuResponse &response);
-  static void ProcessWriteMultipleCoils(AddressMap<bool> &address_map, RtuRequest const &request,
+  static void ProcessWriteMultipleCoils(AddressMap<bool> &address_map, const RtuRequest &request,
                                         RtuResponse &response);
-  void ProcessReadExceptionStatus(RtuRequest const &request, RtuResponse &response) const;
-  static void ProcessDiagnostics(RtuRequest const &request, RtuResponse &response);
-  void ProcessGetComEventCounter(RtuRequest const &request, RtuResponse &response) const;
-  void ProcessGetComEventLog(RtuRequest const &request, RtuResponse &response) const;
-  void ProcessReportSlaveID(RtuRequest const &request, RtuResponse &response) const;
-  void ProcessReadFileRecord(RtuRequest const &request, RtuResponse &response) const;
-  void ProcessWriteFileRecord(RtuRequest const &request, RtuResponse &response);
-  static void ProcessMaskWriteRegister(AddressMap<int16_t> &address_map, RtuRequest const &request,
+  void ProcessReadExceptionStatus(const RtuRequest &request, RtuResponse &response) const;
+  static void ProcessDiagnostics(const RtuRequest &request, RtuResponse &response);
+  void ProcessGetComEventCounter(const RtuRequest &request, RtuResponse &response) const;
+  void ProcessGetComEventLog(const RtuRequest &request, RtuResponse &response) const;
+  void ProcessReportSlaveID(const RtuRequest &request, RtuResponse &response) const;
+  void ProcessReadFileRecord(const RtuRequest &request, RtuResponse &response) const;
+  void ProcessWriteFileRecord(const RtuRequest &request, RtuResponse &response);
+  static void ProcessMaskWriteRegister(AddressMap<int16_t> &address_map, const RtuRequest &request,
                                        RtuResponse &response);
-  static void ProcessReadWriteMultipleRegisters(AddressMap<int16_t> &address_map, RtuRequest const &request,
+  static void ProcessReadWriteMultipleRegisters(AddressMap<int16_t> &address_map, const RtuRequest &request,
                                                 RtuResponse &response);
-  void ProcessReadFIFOQueue(RtuRequest const &request, RtuResponse &response) const;
+  void ProcessReadFIFOQueue(const RtuRequest &request, RtuResponse &response) const;
 
   // File Record storage: file_number -> (record_number -> record_data)
   // Each record is a vector of 16-bit values (registers)

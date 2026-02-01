@@ -54,7 +54,7 @@ class SerialTransport : public ByteTransport {
    * @param data_bits Data bits (typically 8)
    * @param stop_bits Stop bits (1 or 2)
    */
-  SerialTransport(std::string const &port_name, int baud_rate, char parity = 'E', int data_bits = 8, int stop_bits = 1)
+  SerialTransport(const std::string &port_name, int baud_rate, char parity = 'E', int data_bits = 8, int stop_bits = 1)
       : port_name_(port_name),
         fd_(-1),
         baud_rate_(baud_rate),
@@ -70,8 +70,8 @@ class SerialTransport : public ByteTransport {
   ~SerialTransport() override { Close(); }
 
   // Delete copy constructor and assignment
-  SerialTransport(SerialTransport const &) = delete;
-  SerialTransport &operator=(SerialTransport const &) = delete;
+  SerialTransport(const SerialTransport &) = delete;
+  SerialTransport &operator=(const SerialTransport &) = delete;
 
   // Move constructor
   SerialTransport(SerialTransport &&other) noexcept
@@ -162,7 +162,7 @@ class SerialTransport : public ByteTransport {
   }
 
   // ByteWriter interface
-  int Write(std::span<uint8_t const> data) override {
+  int Write(std::span<const uint8_t> data) override {
     if (fd_ < 0) {
       return -1;
     }

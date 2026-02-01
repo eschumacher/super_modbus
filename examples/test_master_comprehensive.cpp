@@ -34,15 +34,15 @@ using supermb::RtuMaster;
 using supermb::RtuSlave;
 using supermb::SerialTransport;
 
-bool volatile g_running = true;
-bool volatile g_slave_running = false;
+volatile bool g_running = true;
+volatile bool g_slave_running = false;
 
 void signal_handler(int signal) {
   (void)signal;
   g_running = false;
 }
 
-void RunSlave(std::string const &port, int baud_rate, uint8_t slave_id) {
+void RunSlave(const std::string &port, int baud_rate, uint8_t slave_id) {
   SerialTransport transport(port, baud_rate);
   if (!transport.IsOpen()) {
     std::cerr << "Error: Slave failed to open port: " << port << "\n";
@@ -81,7 +81,7 @@ struct TestResult {
   std::string error;
 };
 
-int main(int argc, char const *argv[]) {
+int main(int argc, const char *argv[]) {
   std::signal(SIGINT, signal_handler);
   std::signal(SIGTERM, signal_handler);
 
@@ -137,7 +137,7 @@ int main(int argc, char const *argv[]) {
   int total_tests = 0;
   int passed_tests = 0;
 
-  auto run_test = [&](std::string const &name, std::function<bool()> test_func) {
+  auto run_test = [&](const std::string &name, std::function<bool()> test_func) {
     total_tests++;
     std::cout << "Test " << total_tests << ": " << name << "... ";
     std::cout.flush();

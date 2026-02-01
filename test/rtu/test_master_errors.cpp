@@ -50,9 +50,9 @@ class MasterSlaveSimulator {
     transport_.ResetReadPosition();
   }
 
-  void SendRequestOnly(RtuRequest const &request) {
+  void SendRequestOnly(const RtuRequest &request) {
     auto frame = RtuFrame::EncodeRequest(request);
-    (void)transport_.Write(std::span<uint8_t const>(frame.data(), frame.size()));
+    (void)transport_.Write(std::span<const uint8_t>(frame.data(), frame.size()));
     (void)transport_.Flush();
   }
 

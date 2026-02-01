@@ -25,7 +25,7 @@ class AddressMap {
   }
 
   bool Set(int address, DataType value) {
-    auto const value_iter = data_.find(address);
+    const auto value_iter = data_.find(address);
     if (value_iter != data_.end()) {
       value_iter->second = value;
       return true;
@@ -35,7 +35,7 @@ class AddressMap {
   }
 
   [[nodiscard]] std::optional<DataType> operator[](int address) const {
-    auto const value_iter = data_.find(address);
+    const auto value_iter = data_.find(address);
     if (value_iter != data_.end()) {
       return value_iter->second;
     }

@@ -16,10 +16,7 @@ jobs:
     - name: Install clang-format
       run: |
         sudo apt-get update
-        # Pin to clang-format-14 to match local development environment
-        sudo apt-get install -y clang-format-14
-        # Create symlink to ensure clang-format command works
-        sudo ln -sf /usr/bin/clang-format-14 /usr/bin/clang-format || true
+        sudo apt-get install -y clang-format
         clang-format --version
 
     - name: Check code formatting
@@ -38,18 +35,10 @@ jobs:
           exit 0
         fi
 
-        # Ensure we're in repo root and .clang-format exists
-        pwd
-        ls -la .clang-format || echo ".clang-format not found!"
-        clang-format --version
-        echo "Dumping config to verify .clang-format is being used:"
-        clang-format --style=file --dump-config | head -10 || echo "Failed to dump config"
-
         FAILED_FILES=()
         while IFS= read -r file; do
           if [ -f "$file" ]; then
             # Use --style=file which looks for .clang-format in current dir or parent dirs
-            # Since we're in repo root, it will find .clang-format
             if ! clang-format --style=file --dry-run --Werror "$file" >/dev/null 2>&1; then
               FAILED_FILES+=("$file")
             fi

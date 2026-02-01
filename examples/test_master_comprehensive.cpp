@@ -7,7 +7,8 @@
  * function codes.
  *
  * Usage:
- *   ./test_master_comprehensive <master_port> <slave_port> <baud_rate> <slave_id>
+ *   ./test_master_comprehensive <master_port> <slave_port> <baud_rate>
+ * <slave_id>
  *
  * Example:
  *   ./test_master_comprehensive /dev/pts/2 /dev/pts/3 9600 1
@@ -16,17 +17,17 @@
 #include "serial_transport.hpp"
 #include "super_modbus/rtu/rtu_master.hpp"
 #include "super_modbus/rtu/rtu_slave.hpp"
-#include <iostream>
-#include <thread>
+#include <array>
+#include <cassert>
 #include <chrono>
 #include <csignal>
 #include <cstdlib>
-#include <vector>
-#include <array>
-#include <cassert>
 #include <functional>
-#include <string>
+#include <iostream>
 #include <span>
+#include <string>
+#include <thread>
+#include <vector>
 
 using supermb::AddressSpan;
 using supermb::RtuMaster;
@@ -60,8 +61,8 @@ void RunSlave(std::string const &port, int baud_rate, uint8_t slave_id) {
   std::vector<int16_t> fifo_data{0x1111, 0x2222, 0x3333, 0x4444};
   slave.SetFIFOQueue(0, fifo_data);
 
-  // Set up file records by writing them first (they'll be stored when master writes)
-  // We'll write file 1, record 0 with test data via master later
+  // Set up file records by writing them first (they'll be stored when master
+  // writes) We'll write file 1, record 0 with test data via master later
 
   g_slave_running = true;
 

@@ -1,9 +1,9 @@
 #pragma once
 
-#include <cstdint>
-#include <vector>
 #include "../common/exception_code.hpp"
 #include "../common/function_code.hpp"
+#include <cstdint>
+#include <vector>
 
 namespace supermb {
 

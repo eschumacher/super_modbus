@@ -26,10 +26,15 @@ jobs:
     - name: Check code formatting
       continue-on-error: false
       run: |
+        # Ensure we're in the repo root and .clang-format exists
+        if [ ! -f .clang-format ]; then
+          echo "::error::.clang-format file not found in repository root!"
+          exit 1
+        fi
         FAILED_FILES=()
         while IFS= read -r file; do
-          # Use --style=file to explicitly use .clang-format in current directory
-          if ! clang-format --style=file --dry-run --Werror "$file" 2>&1; then
+          # Use explicit path to .clang-format to ensure it's found
+          if ! clang-format --style=file:.clang-format --dry-run --Werror "$file" 2>&1; then
             FAILED_FILES+=("$file")
           fi
         done < <(find . -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) \

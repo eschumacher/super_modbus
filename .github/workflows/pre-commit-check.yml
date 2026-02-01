@@ -35,11 +35,17 @@ jobs:
           exit 0
         fi
 
+        # Ensure .clang-format exists
+        if [ ! -f .clang-format ]; then
+          echo "::error::.clang-format file not found in repository root!"
+          exit 1
+        fi
+
         FAILED_FILES=()
         while IFS= read -r file; do
           if [ -f "$file" ]; then
-            # Use --style=file to explicitly use .clang-format in current directory
-            if ! clang-format --style=file --dry-run --Werror "$file" >/dev/null 2>&1; then
+            # Use explicit path to .clang-format to ensure it's found
+            if ! clang-format --style=file:.clang-format --dry-run --Werror "$file" >/dev/null 2>&1; then
               FAILED_FILES+=("$file")
             fi
           fi

@@ -27,9 +27,9 @@ for file in $STAGED_FILES; do
   fi
 
   # Check if file needs formatting
-  if ! clang-format --style=file --dry-run --Werror "$file" >/dev/null 2>&1; then
+  if ! clang-format --style=file:.clang-format --dry-run --Werror "$file" >/dev/null 2>&1; then
     # Format the file
-    clang-format --style=file -i "$file"
+    clang-format --style=file:.clang-format -i "$file"
     FORMATTED_FILES+=("$file")
     echo -e "${YELLOW}Formatted: $file${NC}"
   fi

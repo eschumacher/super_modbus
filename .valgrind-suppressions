@@ -1,0 +1,13 @@
+# Valgrind suppressions file for super_modbus
+# Add suppressions for known false positives here
+# Format: https://valgrind.org/docs/manual/manual-core.html#manual-core.suppress
+
+# Example suppression (uncomment and modify as needed):
+# {
+#    <suppression_name>
+#    Memcheck:Leak
+#    match-leak-kinds: definite
+#    ...
+#    fun:malloc
+#    ...
+# }

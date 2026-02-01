@@ -28,6 +28,13 @@ add_executable(run_tests
     rtu/test_rtu_request_edge_cases.cpp
     rtu/test_rtu_master_coverage.cpp
     rtu/test_rtu_slave_coverage.cpp
+    tcp/test_tcp_frame.cpp
+    tcp/test_tcp_master.cpp
+    tcp/test_tcp_slave.cpp
+    tcp/test_tcp_frame_edge_cases.cpp
+    tcp/test_tcp_request_edge_cases.cpp
+    tcp/test_tcp_master_coverage.cpp
+    tcp/test_tcp_slave_coverage.cpp
     common/test_common_utilities.cpp
     common/test_crc16.cpp
     transport/test_memory_transport.cpp

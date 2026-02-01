@@ -195,18 +195,22 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake build-essential bc lcov llvm clang
+        sudo apt-get install -y cmake build-essential bc lcov llvm clang libc++-dev libc++abi-dev
 
     - name: Configure CMake with Clang
       run: |
         mkdir -p build
         cd build
+        # Use libc++ to avoid GCC libstdc++ compatibility issues
         CC=clang CXX=clang++ cmake .. \
           -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
           -DBUILD_TESTS=ON \
           -DCOVERAGE=ON \
           -DBUILD_EXAMPLES=ON \
-          -DPROFILING=OFF
+          -DPROFILING=OFF \
+          -DCMAKE_CXX_FLAGS="-stdlib=libc++" \
+          -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++ -lc++abi" \
+          -DCMAKE_SHARED_LINKER_FLAGS="-stdlib=libc++ -lc++abi"
 
     - name: Build
       run: |
@@ -560,7 +564,14 @@ jobs:
         if [ "${{ matrix.compiler }}" = "gcc" ]; then
           sudo apt-get install -y cmake build-essential gcc-${{ matrix.version }} g++-${{ matrix.version }}
         else
+          # Install clang with libc++ (required to avoid GCC libstdc++ compatibility issues)
           sudo apt-get install -y cmake build-essential llvm-${{ matrix.version }} clang-${{ matrix.version }}
+          # Try version-specific libc++ first, then fall back to generic
+          sudo apt-get install -y libc++-${{ matrix.version }}-dev libc++abi-${{ matrix.version }}-dev 2>/dev/null || \
+          sudo apt-get install -y libc++-dev libc++abi-dev || {
+            echo "ERROR: libc++ is required for clang builds but not available"
+            exit 1
+          }
         fi
 
     - name: Configure CMake
@@ -574,11 +585,15 @@ jobs:
             -DBUILD_EXAMPLES=ON \
             -DPROFILING=OFF
         else
+          # Force libc++ for clang to avoid GCC libstdc++ compatibility issues
           CC=clang-${{ matrix.version }} CXX=clang++-${{ matrix.version }} cmake .. \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DBUILD_TESTS=ON \
             -DBUILD_EXAMPLES=ON \
-            -DPROFILING=OFF
+            -DPROFILING=OFF \
+            -DCMAKE_CXX_FLAGS="-stdlib=libc++" \
+            -DCMAKE_EXE_LINKER_FLAGS="-stdlib=libc++ -lc++abi" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-stdlib=libc++ -lc++abi"
         fi
 
     - name: Build

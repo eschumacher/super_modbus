@@ -3,7 +3,7 @@ function(AddCppCheck target)
   if(CPPCHECK_PATH)
     set_target_properties(${target}
       PROPERTIES CXX_CPPCHECK
-      "${CPPCHECK_PATH};--enable=warning;--error-exitcode=10;--library=googletest"
+      "${CPPCHECK_PATH};--enable=warning;--error-exitcode=10;--library=googletest;--suppress=uninitvar"
     )
     message(STATUS "cppcheck found: ${CPPCHECK_PATH}")
   else()

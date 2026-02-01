@@ -828,7 +828,6 @@ TEST(MasterIntegration, WriteFileRecord) {
 TEST(MasterIntegration, CoilPacking) {
   static constexpr uint8_t kSlaveId{23};
   static constexpr size_t kTestCoilCount = 16;
-  static constexpr size_t kCoilsPerByte = 8;
 
   MasterSlaveSimulator sim{kSlaveId};
   sim.SetupCoils({0, kTestCoilCount});

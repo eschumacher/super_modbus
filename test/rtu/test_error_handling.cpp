@@ -212,7 +212,6 @@ TEST(ErrorHandling, InvalidReadWriteMultipleData) {
 }
 
 TEST(ErrorHandling, FrameWithInvalidSlaveIDInResponse) {
-  static constexpr uint8_t kSlaveId{1};
   static constexpr uint8_t kExpectedSlaveId{1};
   static constexpr uint8_t kWrongSlaveId{99};
 

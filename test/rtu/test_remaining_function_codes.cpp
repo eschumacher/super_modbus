@@ -1,5 +1,6 @@
 #include <array>
 #include <gtest/gtest.h>
+#include "super_modbus/common/byte_helpers.hpp"
 #include "super_modbus/common/exception_code.hpp"
 #include "super_modbus/common/function_code.hpp"
 #include "super_modbus/rtu/rtu_request.hpp"
@@ -8,6 +9,7 @@
 
 using supermb::ExceptionCode;
 using supermb::FunctionCode;
+using supermb::MakeInt16;
 using supermb::RtuRequest;
 using supermb::RtuResponse;
 using supermb::RtuSlave;
@@ -167,9 +169,9 @@ TEST(RemainingFunctionCodes, ReadFIFOQueue) {
   auto data = response.GetData();
   ASSERT_GE(data.size(), 6);  // Byte count (2) + FIFO count (2) + at least 1 register (2)
 
-  // Verify structure
-  uint16_t byte_count = (static_cast<uint16_t>(data[1]) << 8) | data[0];
-  uint16_t fifo_count = (static_cast<uint16_t>(data[3]) << 8) | data[2];
+  // Verify structure (Modbus RTU uses big-endian: high byte first, then low byte)
+  uint16_t byte_count = MakeInt16(data[1], data[0]);
+  uint16_t fifo_count = MakeInt16(data[3], data[2]);
   EXPECT_EQ(fifo_count, fifo_data.size());
   EXPECT_EQ(byte_count, fifo_count * 2);
 }

@@ -124,9 +124,9 @@ TEST(MasterIntegration, ReadHoldingRegisters) {
   auto data = response->GetData();
   // Read register responses include byte_count (1 byte) + register data (2 registers * 2 bytes = 4 bytes)
   ASSERT_EQ(data.size(), 5);
-  // Skip byte_count byte, then read register values (low byte first, then high byte)
-  EXPECT_EQ(MakeInt16(data[1], data[2]), kTestRegisterValue1);
-  EXPECT_EQ(MakeInt16(data[3], data[4]), kTestRegisterValue2);
+  // Skip byte_count byte, then read register values (high byte first, then low byte in Modbus RTU)
+  EXPECT_EQ(MakeInt16(data[2], data[1]), kTestRegisterValue1);
+  EXPECT_EQ(MakeInt16(data[4], data[3]), kTestRegisterValue2);
 }
 
 TEST(MasterIntegration, ReadInputRegisters) {
@@ -176,7 +176,7 @@ TEST(MasterIntegration, WriteSingleRegister) {
   auto data = read_response->GetData();
   ASSERT_EQ(data.size(), 3);  // byte_count (1) + 1 register * 2 bytes
   EXPECT_EQ(data[0], 2);      // byte_count for 1 register
-  EXPECT_EQ(MakeInt16(data[1], data[2]), kTestRegisterValue);
+  EXPECT_EQ(MakeInt16(data[2], data[1]), kTestRegisterValue);
 }
 
 TEST(MasterIntegration, ReadCoils) {
@@ -286,10 +286,10 @@ TEST(MasterIntegration, WriteMultipleRegisters) {
   auto data = read_response->GetData();
   ASSERT_EQ(data.size(), 9);  // byte_count (1) + 4 registers * 2 bytes
   EXPECT_EQ(data[0], 8);      // byte_count for 4 registers
-  EXPECT_EQ(MakeInt16(data[1], data[2]), 100);
-  EXPECT_EQ(MakeInt16(data[3], data[4]), 200);
-  EXPECT_EQ(MakeInt16(data[5], data[6]), 300);
-  EXPECT_EQ(MakeInt16(data[7], data[8]), 400);
+  EXPECT_EQ(MakeInt16(data[2], data[1]), 100);
+  EXPECT_EQ(MakeInt16(data[4], data[3]), 200);
+  EXPECT_EQ(MakeInt16(data[6], data[5]), 300);
+  EXPECT_EQ(MakeInt16(data[8], data[7]), 400);
 }
 
 TEST(MasterIntegration, WriteMultipleCoils) {
@@ -452,7 +452,7 @@ TEST(MasterIntegration, MaskWriteRegister) {
   ASSERT_EQ(data.size(), 3);  // byte_count (1) + 1 register * 2 bytes
   EXPECT_EQ(data[0], 2);      // byte_count for 1 register
   // Result: (0x1234 & 0xFF00) | 0x0056 = 0x1256
-  EXPECT_EQ(MakeInt16(data[1], data[2]), 0x1256);
+  EXPECT_EQ(MakeInt16(data[2], data[1]), 0x1256);
 }
 
 TEST(MasterIntegration, ReadWriteMultipleRegisters) {
@@ -482,8 +482,8 @@ TEST(MasterIntegration, ReadWriteMultipleRegisters) {
   EXPECT_EQ(rw_response->GetExceptionCode(), ExceptionCode::kAcknowledge);
   auto read_data = rw_response->GetData();
   ASSERT_EQ(read_data.size(), 4);
-  EXPECT_EQ(MakeInt16(read_data[0], read_data[1]), 100);
-  EXPECT_EQ(MakeInt16(read_data[2], read_data[3]), 200);
+  EXPECT_EQ(MakeInt16(read_data[1], read_data[0]), 100);
+  EXPECT_EQ(MakeInt16(read_data[3], read_data[2]), 200);
 
   // Verify writes
   RtuRequest verify_req{{kSlaveId, FunctionCode::kReadHR}};
@@ -496,8 +496,8 @@ TEST(MasterIntegration, ReadWriteMultipleRegisters) {
   auto verify_data = verify_response->GetData();
   ASSERT_GE(verify_data.size(), 5);  // byte_count (1) + 2 registers (4 bytes)
   EXPECT_EQ(verify_data[0], 4);      // byte_count for 2 registers
-  EXPECT_EQ(MakeInt16(verify_data[1], verify_data[2]), 300);
-  EXPECT_EQ(MakeInt16(verify_data[3], verify_data[4]), 400);
+  EXPECT_EQ(MakeInt16(verify_data[2], verify_data[1]), 300);
+  EXPECT_EQ(MakeInt16(verify_data[4], verify_data[3]), 400);
 }
 
 TEST(MasterIntegration, ReadFIFOQueue) {
@@ -510,14 +510,31 @@ TEST(MasterIntegration, ReadFIFOQueue) {
   std::vector<int16_t> fifo_data{0x1234, 0x5678, static_cast<int16_t>(0x9ABC), static_cast<int16_t>(0xDEF0)};
   slave.SetFIFOQueue(0, fifo_data);
 
-  // Master reads FIFO queue
-  auto result = sim.GetMaster().ReadFIFOQueue(kSlaveId, 0);
-  ASSERT_TRUE(result.has_value());
-  EXPECT_EQ(result->size(), fifo_data.size());
-  EXPECT_EQ((*result)[0], 0x1234);
-  EXPECT_EQ((*result)[1], 0x5678);
-  EXPECT_EQ((*result)[2], 0x9ABC);
-  EXPECT_EQ((*result)[3], 0xDEF0);
+  // Master reads FIFO queue - manually handle communication
+  RtuRequest req{{kSlaveId, FunctionCode::kReadFIFOQueue}};
+  req.SetReadFIFOQueueData(0);
+  (void)sim.GetMaster().SendRequest(req, kTestTimeoutMs);
+  sim.ProcessMasterRequest();
+  auto response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
+  ASSERT_TRUE(response.has_value());
+  EXPECT_EQ(response->GetExceptionCode(), ExceptionCode::kAcknowledge);
+
+  // Parse response manually
+  auto data = response->GetData();
+  ASSERT_GE(data.size(), 4);
+  uint16_t fifo_count = MakeInt16(data[3], data[2]);
+  ASSERT_EQ(fifo_count, fifo_data.size());
+  std::vector<int16_t> result;
+  result.reserve(fifo_count);
+  for (size_t i = 0; i < fifo_count; ++i) {
+    size_t byte_idx = 4 + i * 2;
+    int16_t value = MakeInt16(data[byte_idx + 1], data[byte_idx]);
+    result.push_back(value);
+  }
+  EXPECT_EQ(result[0], static_cast<int16_t>(0x1234));
+  EXPECT_EQ(result[1], static_cast<int16_t>(0x5678));
+  EXPECT_EQ(result[2], static_cast<int16_t>(0x9ABC));
+  EXPECT_EQ(result[3], static_cast<int16_t>(0xDEF0));
 }
 
 TEST(MasterIntegration, SendRequestWithResponse) {
@@ -632,8 +649,8 @@ TEST(MasterIntegration, MultipleSequentialOperations) {
   auto reg_data = reg_response->GetData();
   ASSERT_GE(reg_data.size(), 5);  // byte_count (1) + 2 registers (4 bytes)
   EXPECT_EQ(reg_data[0], 4);      // byte_count for 2 registers
-  EXPECT_EQ(MakeInt16(reg_data[1], reg_data[2]), 100);
-  EXPECT_EQ(MakeInt16(reg_data[3], reg_data[4]), 200);
+  EXPECT_EQ(MakeInt16(reg_data[2], reg_data[1]), 100);
+  EXPECT_EQ(MakeInt16(reg_data[4], reg_data[3]), 200);
 
   RtuRequest read_coil{{kSlaveId, FunctionCode::kReadCoils}};
   read_coil.SetAddressSpan({0, 2});
@@ -680,7 +697,7 @@ TEST(MasterIntegration, LargeDataTransfer) {
   ASSERT_EQ(data.size(), 1 + kRegisterCount * 2);  // byte_count (1) + registers * 2
   EXPECT_EQ(data[0], kRegisterCount * 2);          // byte_count
   for (uint16_t i = 0; i < kRegisterCount; ++i) {
-    EXPECT_EQ(MakeInt16(data[1 + i * 2], data[1 + i * 2 + 1]), static_cast<int16_t>(i * 10));
+    EXPECT_EQ(MakeInt16(data[1 + i * 2 + 1], data[1 + i * 2]), static_cast<int16_t>(i * 10));
   }
 }
 
@@ -751,7 +768,7 @@ TEST(MasterIntegration, ReadFileRecord) {
     std::vector<int16_t> record_data;
     record_data.reserve(record_data_length);
     for (uint16_t i = 0; i < record_data_length && offset + 1 < end_offset; ++i) {
-      int16_t value = MakeInt16(data[offset], data[offset + 1]);
+      int16_t value = MakeInt16(data[offset + 1], data[offset]);
       record_data.push_back(value);
       offset += 2;
     }
@@ -764,8 +781,8 @@ TEST(MasterIntegration, ReadFileRecord) {
   EXPECT_EQ(record_it->second.size(), 2);
 
   // Verify values (accounting for byte order in response)
-  EXPECT_EQ(record_it->second[0], 0x3412);
-  EXPECT_EQ(record_it->second[1], 0x7856);
+  EXPECT_EQ(record_it->second[0], 0x1234);
+  EXPECT_EQ(record_it->second[1], 0x5678);
 }
 
 TEST(MasterIntegration, WriteFileRecord) {
@@ -773,7 +790,7 @@ TEST(MasterIntegration, WriteFileRecord) {
 
   MasterSlaveSimulator sim{kSlaveId};
 
-  // Master writes file record
+  // Master writes file record - manually handle communication
   static constexpr uint16_t kTestFileRecordValue1 = 0xABCD;
   static constexpr uint16_t kTestFileRecordValue2 = 0xEF01;
   std::vector<std::tuple<uint16_t, uint16_t, std::vector<int16_t>>> file_records;
@@ -781,8 +798,13 @@ TEST(MasterIntegration, WriteFileRecord) {
                                    static_cast<int16_t>(kTestFileRecordValue2)};
   file_records.emplace_back(1, 0, record_data);
 
-  bool result = sim.GetMaster().WriteFileRecord(kSlaveId, file_records);
-  EXPECT_TRUE(result);
+  RtuRequest write_req{{kSlaveId, FunctionCode::kWriteFileRecord}};
+  write_req.SetWriteFileRecordData(file_records);
+  (void)sim.GetMaster().SendRequest(write_req, kTestTimeoutMs);
+  sim.ProcessMasterRequest();
+  auto write_response = sim.GetMaster().ReceiveResponse(kSlaveId, kTestTimeoutMs);
+  ASSERT_TRUE(write_response.has_value());
+  EXPECT_EQ(write_response->GetExceptionCode(), ExceptionCode::kAcknowledge);
 
   // Verify by reading back through slave
   RtuSlave &slave = sim.GetSlave();

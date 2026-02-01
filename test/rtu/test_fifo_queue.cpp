@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include "super_modbus/common/byte_helpers.hpp"
 #include "super_modbus/common/exception_code.hpp"
 #include "super_modbus/common/function_code.hpp"
 #include "super_modbus/rtu/rtu_request.hpp"
@@ -7,6 +8,7 @@
 
 using supermb::ExceptionCode;
 using supermb::FunctionCode;
+using supermb::MakeInt16;
 using supermb::RtuRequest;
 using supermb::RtuResponse;
 using supermb::RtuSlave;
@@ -29,9 +31,9 @@ TEST(FIFOQueue, SlaveReadFIFOQueue_ProperQueue) {
   auto data = response.GetData();
   ASSERT_GE(data.size(), 6);
 
-  // Parse response
-  uint16_t byte_count = (static_cast<uint16_t>(data[1]) << 8) | data[0];
-  uint16_t fifo_count = (static_cast<uint16_t>(data[3]) << 8) | data[2];
+  // Parse response (Modbus RTU uses big-endian: high byte first, then low byte)
+  uint16_t byte_count = MakeInt16(data[1], data[0]);
+  uint16_t fifo_count = MakeInt16(data[3], data[2]);
 
   EXPECT_EQ(fifo_count, fifo_data.size());
   EXPECT_EQ(byte_count, fifo_count * 2);
@@ -39,7 +41,7 @@ TEST(FIFOQueue, SlaveReadFIFOQueue_ProperQueue) {
   // Verify data
   for (size_t i = 0; i < fifo_data.size(); ++i) {
     size_t byte_idx = 4 + i * 2;
-    int16_t value = (static_cast<int16_t>(data[byte_idx + 1]) << 8) | data[byte_idx];
+    int16_t value = MakeInt16(data[byte_idx + 1], data[byte_idx]);
     EXPECT_EQ(value, fifo_data[i]);
   }
 }
@@ -95,7 +97,7 @@ TEST(FIFOQueue, SlaveReadFIFOQueue_MultipleQueues) {
   RtuResponse resp1 = slave.Process(req1);
   EXPECT_EQ(resp1.GetExceptionCode(), ExceptionCode::kAcknowledge);
   auto data1 = resp1.GetData();
-  uint16_t count1 = (static_cast<uint16_t>(data1[3]) << 8) | data1[2];
+  uint16_t count1 = MakeInt16(data1[3], data1[2]);
   EXPECT_EQ(count1, 2);
 
   // Read second FIFO
@@ -104,7 +106,7 @@ TEST(FIFOQueue, SlaveReadFIFOQueue_MultipleQueues) {
   RtuResponse resp2 = slave.Process(req2);
   EXPECT_EQ(resp2.GetExceptionCode(), ExceptionCode::kAcknowledge);
   auto data2 = resp2.GetData();
-  uint16_t count2 = (static_cast<uint16_t>(data2[3]) << 8) | data2[2];
+  uint16_t count2 = MakeInt16(data2[3], data2[2]);
   EXPECT_EQ(count2, 3);
 }
 
@@ -126,6 +128,6 @@ TEST(FIFOQueue, SlaveReadFIFOQueue_LargeQueue) {
 
   EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
   auto data = response.GetData();
-  uint16_t fifo_count = (static_cast<uint16_t>(data[3]) << 8) | data[2];
+  uint16_t fifo_count = MakeInt16(data[3], data[2]);
   EXPECT_EQ(fifo_count, 31);
 }

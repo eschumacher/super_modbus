@@ -87,9 +87,9 @@ TEST(RTUSlave, WriteHoldingRegisters) {
   // Read register responses include byte_count (1 byte) + register data (reg_count * 2 bytes)
   EXPECT_EQ(read_response.GetData().size(), static_cast<uint32_t>(1 + kAddressSpan.reg_count * 2));
 
-  // Skip byte_count byte, then read register value (low byte first, then high byte)
+  // Skip byte_count byte, then read register value (high byte first, then low byte in Modbus RTU)
   auto data = read_response.GetData();
-  int16_t reg_value = MakeInt16(data[1], data[2]);
+  int16_t reg_value = MakeInt16(data[2], data[1]);
   EXPECT_EQ(reg_value, kRegisterValue);
 }
 

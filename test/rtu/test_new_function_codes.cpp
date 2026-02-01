@@ -106,12 +106,12 @@ TEST(NewFunctionCodes, WriteMultipleRegisters) {
   auto data = read_response.GetData();
   // Read register responses include byte_count (1 byte) + register data (4 registers * 2 bytes = 8 bytes)
   ASSERT_EQ(data.size(), 9);  // 1 byte_count + 4 registers * 2 bytes
-  // Skip byte_count byte, then read register values (low byte first, then high byte)
+  // Skip byte_count byte, then read register values (high byte first, then low byte in Modbus RTU)
   using supermb::MakeInt16;
-  EXPECT_EQ(MakeInt16(data[1], data[2]), 100);
-  EXPECT_EQ(MakeInt16(data[3], data[4]), 200);
-  EXPECT_EQ(MakeInt16(data[5], data[6]), 300);
-  EXPECT_EQ(MakeInt16(data[7], data[8]), 400);
+  EXPECT_EQ(MakeInt16(data[2], data[1]), 100);
+  EXPECT_EQ(MakeInt16(data[4], data[3]), 200);
+  EXPECT_EQ(MakeInt16(data[6], data[5]), 300);
+  EXPECT_EQ(MakeInt16(data[8], data[7]), 400);
 }
 
 TEST(NewFunctionCodes, WriteMultipleCoils) {

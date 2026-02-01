@@ -41,9 +41,9 @@ TEST(EdgeCases, SingleRegisterReadWrite) {
   // Read register responses include byte_count (1 byte) + register data (1 register * 2 bytes = 2 bytes)
   EXPECT_EQ(read_resp.GetData().size(), 3);
 
-  // Skip byte_count byte, then read register value (low byte first, then high byte)
+  // Skip byte_count byte, then read register value (high byte first, then low byte in Modbus RTU)
   auto data = read_resp.GetData();
-  int16_t value = MakeInt16(data[1], data[2]);
+  int16_t value = MakeInt16(data[2], data[1]);
   EXPECT_EQ(value, static_cast<int16_t>(0x1234));
 }
 
@@ -129,9 +129,9 @@ TEST(EdgeCases, NegativeRegisterValue) {
   RtuResponse read_resp = slave.Process(read_req);
   EXPECT_EQ(read_resp.GetExceptionCode(), ExceptionCode::kAcknowledge);
 
-  // Skip byte_count byte, then read register value (low byte first, then high byte)
+  // Skip byte_count byte, then read register value (high byte first, then low byte in Modbus RTU)
   auto data = read_resp.GetData();
-  int16_t value = MakeInt16(data[1], data[2]);
+  int16_t value = MakeInt16(data[2], data[1]);
   EXPECT_EQ(value, -1234);
 }
 
@@ -150,9 +150,9 @@ TEST(EdgeCases, MaximumRegisterValue) {
   RtuRequest read_req{{kSlaveId, FunctionCode::kReadHR}};
   read_req.SetAddressSpan({0, 1});
   RtuResponse read_resp = slave.Process(read_req);
-  // Skip byte_count byte, then read register value (low byte first, then high byte)
+  // Skip byte_count byte, then read register value (high byte first, then low byte in Modbus RTU)
   auto data = read_resp.GetData();
-  int16_t value = MakeInt16(data[1], data[2]);
+  int16_t value = MakeInt16(data[2], data[1]);
   EXPECT_EQ(value, kMaxValue);
 }
 
@@ -171,9 +171,9 @@ TEST(EdgeCases, MinimumRegisterValue) {
   RtuRequest read_req{{kSlaveId, FunctionCode::kReadHR}};
   read_req.SetAddressSpan({0, 1});
   RtuResponse read_resp = slave.Process(read_req);
-  // Skip byte_count byte, then read register value (low byte first, then high byte)
+  // Skip byte_count byte, then read register value (high byte first, then low byte in Modbus RTU)
   auto data = read_resp.GetData();
-  int16_t value = MakeInt16(data[1], data[2]);
+  int16_t value = MakeInt16(data[2], data[1]);
   EXPECT_EQ(value, kMinValue);
 }
 

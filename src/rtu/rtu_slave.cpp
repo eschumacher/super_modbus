@@ -50,6 +50,15 @@ constexpr size_t kFileRecordReadRecordLengthOffset = 4;
 }  // namespace
 
 RtuResponse RtuSlave::Process(RtuRequest const &request) {
+  // Increment communication event counter and add to log
+  ++com_event_counter_;
+  ++message_count_;
+  if (com_event_log_.size() >= kComEventLogMaxSize) {
+    com_event_log_.erase(com_event_log_.begin());  // Remove oldest entry
+  }
+  ComEventLogEntry new_entry{static_cast<uint16_t>(request.GetFunctionCode()), com_event_counter_};
+  com_event_log_.push_back(new_entry);
+
   RtuResponse response{request.GetSlaveId(), request.GetFunctionCode()};
   switch (request.GetFunctionCode()) {
     case FunctionCode::kReadHR: {

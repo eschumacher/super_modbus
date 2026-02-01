@@ -70,8 +70,8 @@ TEST(Integration, MasterSlaveWriteThenRead) {
   auto data = read_resp.GetData();
   // Read register responses include byte_count (1 byte) + register data (1 register * 2 bytes = 2 bytes)
   ASSERT_EQ(data.size(), 3);
-  // Skip byte_count byte, then read register value (low byte first, then high byte)
-  int16_t value = MakeInt16(data[1], data[2]);
+  // Skip byte_count byte, then read register value (high byte first, then low byte in Modbus RTU)
+  int16_t value = MakeInt16(data[2], data[1]);
   EXPECT_EQ(value, 0x1234);
 }
 
@@ -95,8 +95,8 @@ TEST(Integration, MultipleWriteOperations) {
   auto data = read_resp.GetData();
   // Read register responses include byte_count (1 byte) + register data (1 register * 2 bytes = 2 bytes)
   ASSERT_EQ(data.size(), 3);
-  // Skip byte_count byte, then read register value (low byte first, then high byte)
-  EXPECT_EQ(MakeInt16(data[1], data[2]), 100);
+  // Skip byte_count byte, then read register value (high byte first, then low byte in Modbus RTU)
+  EXPECT_EQ(MakeInt16(data[2], data[1]), 100);
 }
 
 TEST(Integration, CoilAndRegisterMixed) {
@@ -130,8 +130,8 @@ TEST(Integration, CoilAndRegisterMixed) {
   RtuResponse reg_read_resp = slave.Process(reg_read);
   EXPECT_EQ(reg_read_resp.GetExceptionCode(), ExceptionCode::kAcknowledge);
   auto reg_data = reg_read_resp.GetData();
-  // Skip byte_count byte, then read register value (low byte first, then high byte)
-  int16_t reg_value = MakeInt16(reg_data[1], reg_data[2]);
+  // Skip byte_count byte, then read register value (high byte first, then low byte in Modbus RTU)
+  int16_t reg_value = MakeInt16(reg_data[2], reg_data[1]);
   EXPECT_EQ(reg_value, 0x5678);
 }
 

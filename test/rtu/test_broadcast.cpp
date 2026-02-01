@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "super_modbus/common/address_span.hpp"
+#include "super_modbus/common/byte_helpers.hpp"
 #include "super_modbus/common/exception_code.hpp"
 #include "super_modbus/common/function_code.hpp"
 #include "super_modbus/rtu/rtu_frame.hpp"
@@ -13,6 +14,7 @@ using supermb::AddressSpan;
 using supermb::ExceptionCode;
 using supermb::FunctionCode;
 using supermb::IsBroadcastableWrite;
+using supermb::MakeInt16;
 using supermb::MemoryTransport;
 using supermb::RtuFrame;
 using supermb::RtuMaster;
@@ -172,7 +174,7 @@ TEST(Broadcast, SlaveAcceptsBroadcastWrite_NoResponse) {
   EXPECT_EQ(read_resp.GetExceptionCode(), ExceptionCode::kAcknowledge);
   auto data = read_resp.GetData();
   ASSERT_GE(data.size(), 3);
-  int16_t value = (static_cast<int16_t>(data[2]) << 8) | data[1];
+  int16_t value = MakeInt16(data[2], data[1]);
   EXPECT_EQ(value, 0x5678);
 }
 

@@ -154,7 +154,9 @@ std::optional<RtuResponse> RtuFrame::DecodeResponse(std::span<uint8_t const> fra
 
   if (is_exception) {
     // Exception response: next byte is exception code
-    if (frame.size() >= 3) {
+    // Note: frame.size() >= kMinFrameSize (4) already checked above, so >= 3 is always true
+    // But we keep the check for clarity and defensive programming
+    if (frame.size() >= 3) {  // NOLINT(cppcheck-suppress knownConditionTrueFalse)
       auto exception_code = static_cast<ExceptionCode>(frame[2]);
       response.SetExceptionCode(exception_code);
     }

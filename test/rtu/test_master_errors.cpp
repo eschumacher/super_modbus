@@ -25,7 +25,7 @@ using supermb::RtuSlave;
 // Helper class to simulate master-slave communication
 class MasterSlaveSimulator {
  public:
-  MasterSlaveSimulator(uint8_t slave_id)
+  explicit MasterSlaveSimulator(uint8_t slave_id)
       : slave_(slave_id),
         master_(transport_) {}
 

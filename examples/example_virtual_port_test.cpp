@@ -169,7 +169,7 @@ void RunSlave(std::string const &port, int baud_rate, uint8_t slave_id) {
   std::cout << "Total requests processed: " << request_count << "\n";
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char const *argv[]) {
   // Set up signal handlers
   std::signal(SIGINT, signal_handler);
   std::signal(SIGTERM, signal_handler);

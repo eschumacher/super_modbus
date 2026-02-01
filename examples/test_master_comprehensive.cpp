@@ -80,7 +80,7 @@ struct TestResult {
   std::string error;
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char const *argv[]) {
   std::signal(SIGINT, signal_handler);
   std::signal(SIGTERM, signal_handler);
 

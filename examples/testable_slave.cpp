@@ -31,7 +31,7 @@ void signal_handler(int signal) {
   g_running = false;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char const *argv[]) {
   using supermb::AddressSpan;
   using supermb::MemoryTransport;
   using supermb::RtuSlave;

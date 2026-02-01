@@ -38,7 +38,7 @@ target_compile_options(run_tests PRIVATE --coverage -O0)
 target_link_libraries(run_tests PRIVATE --coverage)
 add_custom_target(coverage-clean ${PROJECT_NAME}-lib PRE_BUILD COMMAND find ${CMAKE_BINARY_DIR} -type f -name '*.gcda' -exec rm {} +)
 
-option(COVERAGE "Enable coverage reporting" ON)
+option(COVERAGE "Enable coverage reporting" OFF)
 if (COVERAGE)
     include(AddCoverage)
     AddCoverage(${PROJECT_NAME}-lib)

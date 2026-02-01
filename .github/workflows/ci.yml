@@ -623,6 +623,8 @@ jobs:
 
     - name: Install markdownlint
       run: |
+        sudo apt-get update
+        sudo apt-get install -y npm
         sudo npm install -g markdownlint-cli
 
     - name: Lint markdown files
@@ -708,7 +710,9 @@ jobs:
 
     - name: Install codespell
       run: |
-        pip install codespell
+        sudo apt-get update
+        sudo apt-get install -y python3-pip || true  # Usually pre-installed on GitHub Actions
+        pip install codespell || python3 -m pip install codespell
 
     - name: Run codespell
       run: |

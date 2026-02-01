@@ -27,6 +27,14 @@ jobs:
 
     - name: Check code formatting
       run: |
+        # Verify .clang-format exists and show config
+        if [ ! -f .clang-format ]; then
+          echo "::error::.clang-format file not found!"
+          exit 1
+        fi
+        echo "Using .clang-format configuration:"
+        cat .clang-format
+
         # Get changed files in PR
         if [ "${{ github.event_name }}" = "pull_request" ]; then
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
@@ -41,10 +49,26 @@ jobs:
           exit 0
         fi
 
+        # Use clang-format-14 explicitly, with fallback to clang-format
+        if command -v clang-format-14 &> /dev/null; then
+          FORMAT_CMD="clang-format-14"
+        else
+          FORMAT_CMD="clang-format"
+        fi
+        echo "Using formatter: $FORMAT_CMD"
+        $FORMAT_CMD --version
+
+        # Verify formatter can find .clang-format by checking config
+        echo "Verifying .clang-format is being used:"
+        $FORMAT_CMD --dump-config | grep -E "(ColumnLimit|BasedOnStyle)" || true
+
         FAILED_FILES=()
         while IFS= read -r file; do
-          if [ -f "$file" ] && ! clang-format --dry-run --Werror "$file" >/dev/null 2>&1; then
-            FAILED_FILES+=("$file")
+          if [ -f "$file" ]; then
+            # Use --style=file to explicitly use .clang-format in current directory
+            if ! $FORMAT_CMD --style=file --dry-run --Werror "$file" >/dev/null 2>&1; then
+              FAILED_FILES+=("$file")
+            fi
           fi
         done <<< "$CHANGED_FILES"
 

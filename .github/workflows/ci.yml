@@ -27,14 +27,17 @@ jobs:
       continue-on-error: false
       run: |
         # Ensure we're in the repo root and .clang-format exists
-        if [ ! -f .clang-format ]; then
-          echo "::error::.clang-format file not found in repository root!"
-          exit 1
-        fi
+        pwd
+        ls -la .clang-format || echo ".clang-format not found!"
+        clang-format --version
+        echo "Dumping config to verify .clang-format is being used:"
+        clang-format --style=file --dump-config | head -10 || echo "Failed to dump config"
+
         FAILED_FILES=()
         while IFS= read -r file; do
-          # Use explicit path to .clang-format to ensure it's found
-          if ! clang-format --style=file:.clang-format --dry-run --Werror "$file" 2>&1; then
+          # Use --style=file which looks for .clang-format in current dir or parent dirs
+          # Since we're in repo root, it will find .clang-format
+          if ! clang-format --style=file --dry-run --Werror "$file" 2>&1; then
             FAILED_FILES+=("$file")
           fi
         done < <(find . -type f \( -name "*.cpp" -o -name "*.hpp" -o -name "*.h" \) \

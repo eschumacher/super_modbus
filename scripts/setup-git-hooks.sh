@@ -15,6 +15,7 @@ mkdir -p "$GIT_HOOKS_DIR"
 
 # Install pre-commit hook
 if [ -f "$HOOKS_DIR/pre-commit" ]; then
+  chmod +x "$HOOKS_DIR/pre-commit"
   ln -sf "$HOOKS_DIR/pre-commit" "$GIT_HOOKS_DIR/pre-commit"
   echo "✓ Installed pre-commit hook"
 else
@@ -24,6 +25,7 @@ fi
 
 # Install pre-push hook
 if [ -f "$HOOKS_DIR/pre-push" ]; then
+  chmod +x "$HOOKS_DIR/pre-push"
   ln -sf "$HOOKS_DIR/pre-push" "$GIT_HOOKS_DIR/pre-push"
   echo "✓ Installed pre-push hook"
 else

@@ -802,6 +802,34 @@ TEST(TCPMasterCoverage, ReadFileRecord_InvalidReferenceType) {
   EXPECT_FALSE(result.has_value());
 }
 
+// Malformed response: data_length < 4 causes invalid record_data_length; must be rejected
+TEST(TCPMasterCoverage, ReadFileRecord_DataLengthTooSmall) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kReadFileRecord};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  response.EmplaceBack(8);     // Response length = 8
+  response.EmplaceBack(0x06);  // Reference type
+  response.EmplaceBack(0x02);  // data_length = 2 (invalid: must be >= 4 for file/record numbers)
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x01);
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x00);
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  std::vector<std::tuple<uint16_t, uint16_t, uint16_t>> records;
+  records.emplace_back(1, 0, 1);
+  auto result = master.ReadFileRecord(kUnitId, records);
+  EXPECT_FALSE(result.has_value());
+}
+
 // Test WriteFileRecord with exception response
 TEST(TCPMasterCoverage, WriteFileRecord_ExceptionResponse) {
   static constexpr uint8_t kUnitId{1};

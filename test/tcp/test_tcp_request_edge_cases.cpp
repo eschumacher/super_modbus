@@ -159,17 +159,30 @@ TEST(TCPRequestEdgeCases, SetReadFileRecordDataTooMany) {
   EXPECT_FALSE(result);  // Too many file records should fail
 }
 
-// Boundary: exactly 255 records (max allowed) should succeed
+// Boundary: max records that fit in byte_count (uint8_t max 255); 36 * 7 = 252
 TEST(TCPRequestEdgeCases, SetReadFileRecordData_ExactlyMaxRecords) {
   TcpRequest request{{0, 1, FunctionCode::kReadFileRecord}};
   std::vector<std::tuple<uint16_t, uint16_t, uint16_t>> file_records;
-  for (int i = 0; i < 255; ++i) {
+  constexpr int kMaxRecordsForByteCount = 255 / 7;  // 36
+  for (int i = 0; i < kMaxRecordsForByteCount; ++i) {
     file_records.emplace_back(1, i, 1);
   }
 
   bool result = request.SetReadFileRecordData(file_records);
   EXPECT_TRUE(result);
-  EXPECT_EQ(request.GetData().size(), 1 + 255 * 7);  // byte_count(1) + 255 * 7
+  EXPECT_EQ(request.GetData().size(), 1 + kMaxRecordsForByteCount * 7);
+}
+
+// 37 records cause byte_count = 259, which overflows uint8_t; must be rejected
+TEST(TCPRequestEdgeCases, SetReadFileRecordData_ByteCountOverflow) {
+  TcpRequest request{{0, 1, FunctionCode::kReadFileRecord}};
+  std::vector<std::tuple<uint16_t, uint16_t, uint16_t>> file_records;
+  for (int i = 0; i < 37; ++i) {
+    file_records.emplace_back(1, i, 1);
+  }
+
+  bool result = request.SetReadFileRecordData(file_records);
+  EXPECT_FALSE(result);
 }
 
 TEST(TCPRequestEdgeCases, SetWriteFileRecordDataInvalidFunction) {

@@ -469,12 +469,16 @@ TcpMaster::ReadFileRecord(uint8_t unit_id, std::span<const std::tuple<uint16_t, 
     }
 
     uint8_t data_length = data[offset + 1];
+    // Sub-response header is 4 bytes (file_number + record_number); data_length must include them
+    if (data_length < 4) {
+      return {};  // Malformed: data_length too small for sub-response header
+    }
     uint16_t file_number = MakeInt16(data[offset + 3], data[offset + 2]);
     uint16_t record_number = MakeInt16(data[offset + 5], data[offset + 4]);
     offset += 6;  // Skip header
 
-    // Extract record data
-    uint16_t record_data_length = (data_length - 4) / 2;  // Subtract file/record numbers (4 bytes)
+    // Extract record data (data_length - 4 bytes for file/record numbers, then /2 for register count)
+    uint16_t record_data_length = static_cast<uint16_t>(data_length - 4) / 2;
     std::vector<int16_t> record_data;
     record_data.reserve(record_data_length);
 

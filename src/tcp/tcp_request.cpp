@@ -23,6 +23,9 @@ static constexpr uint8_t kAddressSpanStartAddressIndex{0};
 static constexpr uint8_t kAddressSpanRegCountIndex{2};
 static constexpr uint8_t kAddressSpanMinDataSize{4};
 static constexpr uint8_t kMaxFileRecords{255};
+// byte_count is uint8_t (0-255); each Read File Record sub-request is 7 bytes
+static constexpr size_t kMaxReadFileRecordByteCount{255};
+static constexpr size_t kBytesPerReadFileRecord{7};
 
 // Helper function to check if function code is in valid functions array
 static constexpr bool IsAddressSpanValidFunction(FunctionCode function_code) {
@@ -295,15 +298,21 @@ bool TcpRequest::SetReadFileRecordData(std::span<const std::tuple<uint16_t, uint
     return false;
   }
 
+  // byte_count is uint8_t (0-255); avoid overflow when casting to uint8_t
+  const size_t byte_count_value = file_records.size() * kBytesPerReadFileRecord;
+  if (byte_count_value > kMaxReadFileRecordByteCount) {
+    return false;
+  }
+
   // Calculate total size: byte_count(1) + file_records * (reference_type(1) + file_number(2) + record_number(2) +
   // record_length(2))
-  size_t total_size = 1 + file_records.size() * 7;
+  size_t total_size = 1 + byte_count_value;
 
   data_.clear();
   data_.resize(total_size);
 
   // Byte count (number of bytes following)
-  data_[0] = static_cast<uint8_t>(file_records.size() * 7);
+  data_[0] = static_cast<uint8_t>(byte_count_value);
 
   // File records
   size_t offset = 1;

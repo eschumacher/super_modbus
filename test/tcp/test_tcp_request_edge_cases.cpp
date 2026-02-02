@@ -1,3 +1,4 @@
+#include <array>
 #include <gtest/gtest.h>
 #include "super_modbus/common/address_span.hpp"
 #include "super_modbus/common/byte_helpers.hpp"
@@ -9,7 +10,7 @@ using supermb::FunctionCode;
 using supermb::TcpRequest;
 
 TEST(TCPRequestEdgeCases, GetAddressSpanInvalidFunction) {
-  TcpRequest request{{FunctionCode::kReadExceptionStatus}};
+  TcpRequest request{{0, 1, FunctionCode::kReadExceptionStatus}};
   request.SetRawData({0x00, 0x01, 0x00, 0x05});
 
   auto span = request.GetAddressSpan();
@@ -17,7 +18,7 @@ TEST(TCPRequestEdgeCases, GetAddressSpanInvalidFunction) {
 }
 
 TEST(TCPRequestEdgeCases, GetAddressSpanInsufficientData) {
-  TcpRequest request{{FunctionCode::kReadHR}};
+  TcpRequest request{{0, 1, FunctionCode::kReadHR}};
   request.SetRawData({0x00, 0x01});  // Only 2 bytes, need 4
 
   auto span = request.GetAddressSpan();
@@ -25,42 +26,37 @@ TEST(TCPRequestEdgeCases, GetAddressSpanInsufficientData) {
 }
 
 TEST(TCPRequestEdgeCases, SetAddressSpanInvalidFunction) {
-  TcpRequest request{{FunctionCode::kReadExceptionStatus}};
+  TcpRequest request{{0, 1, FunctionCode::kReadExceptionStatus}};
   AddressSpan span{0, 10};
 
-  // This should assert or return false
-  // Since we can't test assertions easily, we'll just verify the function exists
-  bool result = request.SetAddressSpan(span);
-  EXPECT_FALSE(result);
+  // This should assert in debug builds
+  EXPECT_DEATH(request.SetAddressSpan(span), ".*");
 }
 
 TEST(TCPRequestEdgeCases, SetWriteSingleRegisterDataInvalidFunction) {
-  TcpRequest request{{FunctionCode::kReadHR}};
+  TcpRequest request{{0, 1, FunctionCode::kReadHR}};
 
-  // This should assert or return false
-  bool result = request.SetWriteSingleRegisterData(0, 100);
-  EXPECT_FALSE(result);
+  // This should assert in debug builds
+  EXPECT_DEATH(request.SetWriteSingleRegisterData(0, 100), ".*");
 }
 
 TEST(TCPRequestEdgeCases, SetWriteSingleCoilDataInvalidFunction) {
-  TcpRequest request{{FunctionCode::kReadHR}};
+  TcpRequest request{{0, 1, FunctionCode::kReadHR}};
 
-  // This should assert or return false
-  bool result = request.SetWriteSingleCoilData(0, true);
-  EXPECT_FALSE(result);
+  // This should assert in debug builds
+  EXPECT_DEATH(request.SetWriteSingleCoilData(0, true), ".*");
 }
 
 TEST(TCPRequestEdgeCases, SetWriteMultipleRegistersDataInvalidFunction) {
-  TcpRequest request{{FunctionCode::kReadHR}};
+  TcpRequest request{{0, 1, FunctionCode::kReadHR}};
   std::vector<int16_t> values{100, 200};
 
-  // This should assert or return false
-  bool result = request.SetWriteMultipleRegistersData(0, 2, values);
-  EXPECT_FALSE(result);
+  // This should assert in debug builds
+  EXPECT_DEATH(request.SetWriteMultipleRegistersData(0, 2, values), ".*");
 }
 
 TEST(TCPRequestEdgeCases, SetWriteMultipleRegistersDataCountMismatch) {
-  TcpRequest request{{FunctionCode::kWriteMultRegs}};
+  TcpRequest request{{0, 1, FunctionCode::kWriteMultRegs}};
   std::vector<int16_t> values{100, 200, 300};
 
   // Count is 2 but values.size() is 3
@@ -69,17 +65,16 @@ TEST(TCPRequestEdgeCases, SetWriteMultipleRegistersDataCountMismatch) {
 }
 
 TEST(TCPRequestEdgeCases, SetWriteMultipleCoilsDataInvalidFunction) {
-  TcpRequest request{{FunctionCode::kReadHR}};
-  std::vector<bool> values{true, false};
+  TcpRequest request{{0, 1, FunctionCode::kReadHR}};
+  std::array<bool, 2> values{true, false};
 
-  // This should assert or return false
-  bool result = request.SetWriteMultipleCoilsData(0, 2, values);
-  EXPECT_FALSE(result);
+  // This should assert in debug builds
+  EXPECT_DEATH(request.SetWriteMultipleCoilsData(0, 2, values), ".*");
 }
 
 TEST(TCPRequestEdgeCases, SetWriteMultipleCoilsDataCountMismatch) {
-  TcpRequest request{{FunctionCode::kWriteMultCoils}};
-  std::vector<bool> values{true, false, true};
+  TcpRequest request{{0, 1, FunctionCode::kWriteMultCoils}};
+  std::array<bool, 3> values{true, false, true};
 
   // Count is 2 but values.size() is 3
   bool result = request.SetWriteMultipleCoilsData(0, 2, values);
@@ -87,33 +82,30 @@ TEST(TCPRequestEdgeCases, SetWriteMultipleCoilsDataCountMismatch) {
 }
 
 TEST(TCPRequestEdgeCases, SetDiagnosticsDataInvalidFunction) {
-  TcpRequest request{{FunctionCode::kReadHR}};
+  TcpRequest request{{0, 1, FunctionCode::kReadHR}};
   std::vector<uint8_t> data{0x12, 0x34};
 
-  // This should assert or return false
-  bool result = request.SetDiagnosticsData(0x0001, data);
-  EXPECT_FALSE(result);
+  // This should assert in debug builds
+  EXPECT_DEATH(request.SetDiagnosticsData(0x0001, data), ".*");
 }
 
 TEST(TCPRequestEdgeCases, SetMaskWriteRegisterDataInvalidFunction) {
-  TcpRequest request{{FunctionCode::kReadHR}};
+  TcpRequest request{{0, 1, FunctionCode::kReadHR}};
 
-  // This should assert or return false
-  bool result = request.SetMaskWriteRegisterData(0, 0xFF00, 0x00FF);
-  EXPECT_FALSE(result);
+  // This should assert in debug builds
+  EXPECT_DEATH(request.SetMaskWriteRegisterData(0, 0xFF00, 0x00FF), ".*");
 }
 
 TEST(TCPRequestEdgeCases, SetReadWriteMultipleRegistersDataInvalidFunction) {
-  TcpRequest request{{FunctionCode::kReadHR}};
+  TcpRequest request{{0, 1, FunctionCode::kReadHR}};
   std::vector<int16_t> write_values{100, 200};
 
-  // This should assert or return false
-  bool result = request.SetReadWriteMultipleRegistersData(0, 3, 10, 2, write_values);
-  EXPECT_FALSE(result);
+  // This should assert in debug builds
+  EXPECT_DEATH(request.SetReadWriteMultipleRegistersData(0, 3, 10, 2, write_values), ".*");
 }
 
 TEST(TCPRequestEdgeCases, SetReadWriteMultipleRegistersDataCountMismatch) {
-  TcpRequest request{{FunctionCode::kReadWriteMultRegs}};
+  TcpRequest request{{0, 1, FunctionCode::kReadWriteMultRegs}};
   std::vector<int16_t> write_values{100, 200, 300};
 
   // Write count is 2 but write_values.size() is 3
@@ -122,24 +114,22 @@ TEST(TCPRequestEdgeCases, SetReadWriteMultipleRegistersDataCountMismatch) {
 }
 
 TEST(TCPRequestEdgeCases, SetReadFIFOQueueDataInvalidFunction) {
-  TcpRequest request{{FunctionCode::kReadHR}};
+  TcpRequest request{{0, 1, FunctionCode::kReadHR}};
 
-  // This should assert or return false
-  bool result = request.SetReadFIFOQueueData(0x1234);
-  EXPECT_FALSE(result);
+  // This should assert in debug builds
+  EXPECT_DEATH(request.SetReadFIFOQueueData(0x1234), ".*");
 }
 
 TEST(TCPRequestEdgeCases, SetReadFileRecordDataInvalidFunction) {
-  TcpRequest request{{FunctionCode::kReadHR}};
+  TcpRequest request{{0, 1, FunctionCode::kReadHR}};
   std::vector<std::tuple<uint16_t, uint16_t, uint16_t>> file_records{{1, 0, 5}};
 
-  // This should assert or return false
-  bool result = request.SetReadFileRecordData(file_records);
-  EXPECT_FALSE(result);
+  // This should assert in debug builds
+  EXPECT_DEATH(request.SetReadFileRecordData(file_records), ".*");
 }
 
 TEST(TCPRequestEdgeCases, SetReadFileRecordDataEmpty) {
-  TcpRequest request{{FunctionCode::kReadFileRecord}};
+  TcpRequest request{{0, 1, FunctionCode::kReadFileRecord}};
   std::vector<std::tuple<uint16_t, uint16_t, uint16_t>> file_records;
 
   bool result = request.SetReadFileRecordData(file_records);
@@ -147,7 +137,7 @@ TEST(TCPRequestEdgeCases, SetReadFileRecordDataEmpty) {
 }
 
 TEST(TCPRequestEdgeCases, SetReadFileRecordDataTooMany) {
-  TcpRequest request{{FunctionCode::kReadFileRecord}};
+  TcpRequest request{{0, 1, FunctionCode::kReadFileRecord}};
   std::vector<std::tuple<uint16_t, uint16_t, uint16_t>> file_records;
   // Add 256 records (max is 255)
   for (int i = 0; i < 256; ++i) {
@@ -159,16 +149,15 @@ TEST(TCPRequestEdgeCases, SetReadFileRecordDataTooMany) {
 }
 
 TEST(TCPRequestEdgeCases, SetWriteFileRecordDataInvalidFunction) {
-  TcpRequest request{{FunctionCode::kReadHR}};
+  TcpRequest request{{0, 1, FunctionCode::kReadHR}};
   std::vector<std::tuple<uint16_t, uint16_t, std::vector<int16_t>>> file_records{{1, 0, {100, 200, 300}}};
 
-  // This should assert or return false
-  bool result = request.SetWriteFileRecordData(file_records);
-  EXPECT_FALSE(result);
+  // This should assert in debug builds
+  EXPECT_DEATH(request.SetWriteFileRecordData(file_records), ".*");
 }
 
 TEST(TCPRequestEdgeCases, SetWriteFileRecordDataEmpty) {
-  TcpRequest request{{FunctionCode::kWriteFileRecord}};
+  TcpRequest request{{0, 1, FunctionCode::kWriteFileRecord}};
   std::vector<std::tuple<uint16_t, uint16_t, std::vector<int16_t>>> file_records;
 
   bool result = request.SetWriteFileRecordData(file_records);
@@ -176,7 +165,7 @@ TEST(TCPRequestEdgeCases, SetWriteFileRecordDataEmpty) {
 }
 
 TEST(TCPRequestEdgeCases, SetWriteFileRecordDataTooMany) {
-  TcpRequest request{{FunctionCode::kWriteFileRecord}};
+  TcpRequest request{{0, 1, FunctionCode::kWriteFileRecord}};
   std::vector<std::tuple<uint16_t, uint16_t, std::vector<int16_t>>> file_records;
   // Add 256 records (max is 255)
   for (int i = 0; i < 256; ++i) {
@@ -188,7 +177,7 @@ TEST(TCPRequestEdgeCases, SetWriteFileRecordDataTooMany) {
 }
 
 TEST(TCPRequestEdgeCases, SetRawData) {
-  TcpRequest request{{FunctionCode::kReadHR}};
+  TcpRequest request{{0, 1, FunctionCode::kReadHR}};
   std::vector<uint8_t> data{0x00, 0x01, 0x00, 0x05};
 
   request.SetRawData(data);
@@ -200,7 +189,7 @@ TEST(TCPRequestEdgeCases, SetRawData) {
 }
 
 TEST(TCPRequestEdgeCases, SetRawDataSpan) {
-  TcpRequest request{{FunctionCode::kReadHR}};
+  TcpRequest request{{0, 1, FunctionCode::kReadHR}};
   std::vector<uint8_t> data{0x00, 0x01, 0x00, 0x05};
 
   request.SetRawData(std::span<const uint8_t>(data.data(), data.size()));
@@ -208,7 +197,7 @@ TEST(TCPRequestEdgeCases, SetRawDataSpan) {
 }
 
 TEST(TCPRequestEdgeCases, ValidAddressSpan) {
-  TcpRequest request{{FunctionCode::kReadHR}};
+  TcpRequest request{{0, 1, FunctionCode::kReadHR}};
   AddressSpan span{100, 50};
 
   bool result = request.SetAddressSpan(span);
@@ -221,7 +210,7 @@ TEST(TCPRequestEdgeCases, ValidAddressSpan) {
 }
 
 TEST(TCPRequestEdgeCases, ValidWriteSingleRegister) {
-  TcpRequest request{{FunctionCode::kWriteSingleReg}};
+  TcpRequest request{{0, 1, FunctionCode::kWriteSingleReg}};
   bool result = request.SetWriteSingleRegisterData(50, 1234);
   EXPECT_TRUE(result);
 
@@ -230,7 +219,7 @@ TEST(TCPRequestEdgeCases, ValidWriteSingleRegister) {
 }
 
 TEST(TCPRequestEdgeCases, ValidWriteSingleCoil) {
-  TcpRequest request{{FunctionCode::kWriteSingleCoil}};
+  TcpRequest request{{0, 1, FunctionCode::kWriteSingleCoil}};
   bool result = request.SetWriteSingleCoilData(10, true);
   EXPECT_TRUE(result);
 
@@ -242,7 +231,7 @@ TEST(TCPRequestEdgeCases, ValidWriteSingleCoil) {
 }
 
 TEST(TCPRequestEdgeCases, ValidWriteSingleCoilOff) {
-  TcpRequest request{{FunctionCode::kWriteSingleCoil}};
+  TcpRequest request{{0, 1, FunctionCode::kWriteSingleCoil}};
   bool result = request.SetWriteSingleCoilData(10, false);
   EXPECT_TRUE(result);
 
@@ -254,7 +243,7 @@ TEST(TCPRequestEdgeCases, ValidWriteSingleCoilOff) {
 }
 
 TEST(TCPRequestEdgeCases, ValidWriteMultipleRegisters) {
-  TcpRequest request{{FunctionCode::kWriteMultRegs}};
+  TcpRequest request{{0, 1, FunctionCode::kWriteMultRegs}};
   std::vector<int16_t> values{100, 200, 300, 400};
 
   bool result = request.SetWriteMultipleRegistersData(0, 4, values);
@@ -266,10 +255,10 @@ TEST(TCPRequestEdgeCases, ValidWriteMultipleRegisters) {
 }
 
 TEST(TCPRequestEdgeCases, ValidWriteMultipleCoils) {
-  TcpRequest request{{FunctionCode::kWriteMultCoils}};
-  std::vector<bool> values{true, false, true, false, true, false, true, false};
+  TcpRequest request{{0, 1, FunctionCode::kWriteMultCoils}};
+  std::array<bool, 8> values{true, false, true, false, true, false, true, false};
 
-  bool result = request.SetWriteMultipleCoilsData(0, 8, values);
+  bool result = request.SetWriteMultipleCoilsData(0, 8, std::span<const bool>(values));
   EXPECT_TRUE(result);
 
   auto data = request.GetData();
@@ -278,7 +267,7 @@ TEST(TCPRequestEdgeCases, ValidWriteMultipleCoils) {
 }
 
 TEST(TCPRequestEdgeCases, ValidReadWriteMultipleRegisters) {
-  TcpRequest request{{FunctionCode::kReadWriteMultRegs}};
+  TcpRequest request{{0, 1, FunctionCode::kReadWriteMultRegs}};
   std::vector<int16_t> write_values{100, 200};
 
   bool result = request.SetReadWriteMultipleRegistersData(0, 3, 10, 2, write_values);
@@ -291,7 +280,7 @@ TEST(TCPRequestEdgeCases, ValidReadWriteMultipleRegisters) {
 }
 
 TEST(TCPRequestEdgeCases, ValidReadFIFOQueue) {
-  TcpRequest request{{FunctionCode::kReadFIFOQueue}};
+  TcpRequest request{{0, 1, FunctionCode::kReadFIFOQueue}};
   bool result = request.SetReadFIFOQueueData(0x1234);
   EXPECT_TRUE(result);
 
@@ -300,19 +289,19 @@ TEST(TCPRequestEdgeCases, ValidReadFIFOQueue) {
 }
 
 TEST(TCPRequestEdgeCases, ValidReadFileRecord) {
-  TcpRequest request{{FunctionCode::kReadFileRecord}};
+  TcpRequest request{{0, 1, FunctionCode::kReadFileRecord}};
   std::vector<std::tuple<uint16_t, uint16_t, uint16_t>> file_records{{1, 0, 5}, {1, 1, 10}, {2, 0, 3}};
 
   bool result = request.SetReadFileRecordData(file_records);
   EXPECT_TRUE(result);
 
   auto data = request.GetData();
-  // Byte count (1) + 3 records * 6 bytes each = 19 bytes
-  EXPECT_EQ(data.size(), 19);
+  // Byte count (1) + 3 records * 7 bytes each (ref_type(1) + file(2) + record(2) + length(2)) = 22 bytes
+  EXPECT_EQ(data.size(), 22);
 }
 
 TEST(TCPRequestEdgeCases, ValidWriteFileRecord) {
-  TcpRequest request{{FunctionCode::kWriteFileRecord}};
+  TcpRequest request{{0, 1, FunctionCode::kWriteFileRecord}};
   std::vector<std::tuple<uint16_t, uint16_t, std::vector<int16_t>>> file_records{{1, 0, {100, 200, 300}},
                                                                                  {1, 1, {400, 500}}};
 

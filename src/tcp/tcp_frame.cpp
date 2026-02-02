@@ -162,9 +162,11 @@ std::optional<TcpRequest> TcpFrame::DecodeRequest(std::span<const uint8_t> frame
   uint8_t unit_id = ExtractUnitId(frame);
 
   // Verify length matches frame size
-  // Length field includes Unit ID + PDU, so total frame size should be MBAP(7) + (length - 1)
-  // Actually, length is Unit ID + PDU, so frame size = MBAP(7) + length
-  if (frame.size() < kMbapHeaderSize + length) {
+  // MBAP header = Transaction ID(2) + Protocol ID(2) + Length(2) + Unit ID(1) = 7 bytes
+  // Length field value = Unit ID(1) + PDU size
+  // PDU = Function Code + Data = (length - 1) bytes (since length includes Unit ID)
+  // Total frame size = 7 + (length - 1) = 6 + length
+  if (frame.size() < 6 + length) {
     return {};
   }
 
@@ -250,7 +252,11 @@ std::optional<TcpResponse> TcpFrame::DecodeResponse(std::span<const uint8_t> fra
   uint8_t unit_id = ExtractUnitId(frame);
 
   // Verify length matches frame size
-  if (frame.size() < kMbapHeaderSize + length) {
+  // MBAP header = Transaction ID(2) + Protocol ID(2) + Length(2) + Unit ID(1) = 7 bytes
+  // Length field value = Unit ID(1) + PDU size
+  // PDU = Function Code + Data = (length - 1) bytes (since length includes Unit ID)
+  // Total frame size = 7 + (length - 1) = 6 + length
+  if (frame.size() < 6 + length) {
     return {};
   }
 
@@ -270,10 +276,12 @@ std::optional<TcpResponse> TcpFrame::DecodeResponse(std::span<const uint8_t> fra
 
   if (is_exception) {
     // Exception response: next byte is exception code
-    if (length > 1 && frame.size() >= pdu_start + 2) {
-      auto exception_code = static_cast<ExceptionCode>(frame[pdu_start + 1]);
-      response.SetExceptionCode(exception_code);
+    // Length must be at least 3: Unit ID(1) + Function Code(1) + Exception Code(1)
+    if (length < 3 || frame.size() < pdu_start + 2) {
+      return {};  // Invalid exception response - insufficient data
     }
+    auto exception_code = static_cast<ExceptionCode>(frame[pdu_start + 1]);
+    response.SetExceptionCode(exception_code);
   } else {
     // Normal response: extract data
     if (length > 1) {
@@ -318,8 +326,10 @@ bool TcpFrame::IsRequestFrameComplete(std::span<const uint8_t> frame) {
 
   // Check if we have enough bytes to read the length field
   uint16_t length = ExtractLength(frame);
-  // Total frame size = MBAP header (7) + length
-  size_t expected_size = kMbapHeaderSize + length;
+  // MBAP header = Transaction ID(2) + Protocol ID(2) + Length(2) + Unit ID(1) = 7 bytes
+  // Length field value = Unit ID(1) + PDU size
+  // Total frame size = 7 + (length - 1) = 6 + length
+  size_t expected_size = 6 + length;
   return frame.size() >= expected_size;
 }
 

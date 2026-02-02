@@ -34,7 +34,6 @@ constexpr uint8_t kMaxByteValue = 0xFF;
 constexpr size_t kFileRecordMinHeaderSize =
     7;  // reference_type(1) + file_number(2) + record_number(2) + record_length(2)
 constexpr size_t kFileRecordReadMinSize = 6;  // file_number(2) + record_number(2) + record_length(2)
-constexpr size_t 256 = 256;
 constexpr size_t kFifoQueueMaxSize = 64;
 // Array index offsets for ReadWriteMultipleRegisters
 constexpr size_t kReadWriteReadStartOffset = 0;
@@ -468,28 +467,31 @@ void TcpSlave::ProcessDiagnostics(const TcpRequest &request, TcpResponse &respon
 
 void TcpSlave::ProcessGetComEventCounter(const TcpRequest & /*request*/, TcpResponse &response) const {
   // FC 11: Get Com Event Counter - Returns 2 bytes: status (1) + event count (2)
+  // Modbus uses big-endian: high byte first, then low byte
   response.EmplaceBack(0x00);  // Status: 0x00 = no error, 0xFF = error
-  response.EmplaceBack(GetLowByte(com_event_counter_));
   response.EmplaceBack(GetHighByte(com_event_counter_));
+  response.EmplaceBack(GetLowByte(com_event_counter_));
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
 void TcpSlave::ProcessGetComEventLog(const TcpRequest & /*request*/, TcpResponse &response) const {
   // FC 12: Get Com Event Log - Returns status, event count, message count, and events
+  // Modbus uses big-endian: high byte first, then low byte
   response.EmplaceBack(0x00);  // Status (0x00 = no error, kMaxByteValue = error)
-  response.EmplaceBack(GetLowByte(com_event_counter_));
   response.EmplaceBack(GetHighByte(com_event_counter_));
-  response.EmplaceBack(GetLowByte(message_count_));
+  response.EmplaceBack(GetLowByte(com_event_counter_));
   response.EmplaceBack(GetHighByte(message_count_));
+  response.EmplaceBack(GetLowByte(message_count_));
 
   // Add event log entries (up to kComEventLogMaxSize events max per Modbus spec)
+  // Modbus uses big-endian: high byte first, then low byte
   size_t event_count = std::min(com_event_log_.size(), size_t{kComEventLogMaxSize});
   for (size_t i = 0; i < event_count; ++i) {
     const auto &entry = com_event_log_[i];
-    response.EmplaceBack(GetLowByte(entry.event_id));
     response.EmplaceBack(GetHighByte(entry.event_id));
-    response.EmplaceBack(GetLowByte(entry.event_count));
+    response.EmplaceBack(GetLowByte(entry.event_id));
     response.EmplaceBack(GetHighByte(entry.event_count));
+    response.EmplaceBack(GetLowByte(entry.event_count));
   }
 
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
@@ -788,21 +790,26 @@ std::optional<std::vector<uint8_t>> TcpSlave::ReadFrame(ByteReader &transport, u
       continue;
     }
 
-    size_t needed = 7 - buffer.size();
+    size_t current_size = buffer.size();
+    size_t needed = 7 - current_size;
     buffer.resize(7);
-    std::span<uint8_t> read_span(buffer.data() + buffer.size() - needed, needed);
+    std::span<uint8_t> read_span(buffer.data() + current_size, needed);
     int bytes_read = transport.Read(read_span);
     if (bytes_read <= 0) {
+      buffer.resize(current_size);  // Restore original size on error
       return {};
     }
-    buffer.resize(buffer.size() - needed + static_cast<size_t>(bytes_read));
+    buffer.resize(current_size + static_cast<size_t>(bytes_read));
   }
 
   // Extract length from MBAP header (bytes 4-5, big-endian)
   uint16_t length = static_cast<uint16_t>((static_cast<uint16_t>(buffer[4]) << 8) | static_cast<uint16_t>(buffer[5]));
 
-  // Read remaining bytes (length includes Unit ID + PDU)
-  size_t total_size = 7 + length;
+  // Read remaining bytes
+  // MBAP header = Transaction ID(2) + Protocol ID(2) + Length(2) + Unit ID(1) = 7 bytes
+  // Length field value = Unit ID(1) + PDU size
+  // Total frame size = 7 + (length - 1) = 6 + length
+  size_t total_size = 6 + length;
   while (buffer.size() < total_size) {
     if (timeout_ms > 0) {
       auto elapsed = std::chrono::steady_clock::now() - start_time;
@@ -817,14 +824,16 @@ std::optional<std::vector<uint8_t>> TcpSlave::ReadFrame(ByteReader &transport, u
       continue;
     }
 
-    size_t needed = total_size - buffer.size();
+    size_t current_size = buffer.size();
+    size_t needed = total_size - current_size;
     buffer.resize(total_size);
-    std::span<uint8_t> read_span(buffer.data() + buffer.size() - needed, needed);
+    std::span<uint8_t> read_span(buffer.data() + current_size, needed);
     int bytes_read = transport.Read(read_span);
     if (bytes_read <= 0) {
+      buffer.resize(current_size);  // Restore original size on error
       return {};
     }
-    buffer.resize(buffer.size() - needed + static_cast<size_t>(bytes_read));
+    buffer.resize(current_size + static_cast<size_t>(bytes_read));
   }
 
   return buffer;

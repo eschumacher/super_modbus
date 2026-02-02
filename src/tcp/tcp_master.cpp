@@ -294,7 +294,8 @@ std::optional<std::pair<uint8_t, uint16_t>> TcpMaster::GetComEventCounter(uint8_
     return {};
   }
   uint8_t status = response_data[0];
-  uint16_t event_count = MakeInt16(response_data[1], response_data[2]);
+  // Modbus uses big-endian: data[1] is high byte, data[2] is low byte
+  uint16_t event_count = MakeInt16(response_data[2], response_data[1]);
   return std::make_pair(status, event_count);
 }
 
@@ -560,20 +561,25 @@ std::optional<std::vector<uint8_t>> TcpMaster::ReadFrame(uint32_t timeout_ms) {
       continue;
     }
 
-    size_t needed = 7 - frame.size();
+    size_t current_size = frame.size();
+    size_t needed = 7 - current_size;
     frame.resize(7);
-    int bytes_read = transport_.Read(std::span<uint8_t>(frame.data() + frame.size() - needed, needed));
+    int bytes_read = transport_.Read(std::span<uint8_t>(frame.data() + current_size, needed));
     if (bytes_read <= 0) {
+      frame.resize(current_size);  // Restore original size on error
       return {};
     }
-    frame.resize(frame.size() - needed + static_cast<size_t>(bytes_read));
+    frame.resize(current_size + static_cast<size_t>(bytes_read));
   }
 
   // Extract length from MBAP header (bytes 4-5, big-endian)
   uint16_t length = static_cast<uint16_t>((static_cast<uint16_t>(frame[4]) << 8) | static_cast<uint16_t>(frame[5]));
 
-  // Read remaining bytes (length includes Unit ID + PDU)
-  size_t total_size = 7 + length;
+  // Read remaining bytes
+  // MBAP header = Transaction ID(2) + Protocol ID(2) + Length(2) + Unit ID(1) = 7 bytes
+  // Length field value = Unit ID(1) + PDU size
+  // Total frame size = 7 + (length - 1) = 6 + length
+  size_t total_size = 6 + length;
   while (frame.size() < total_size) {
     if (timeout_ms > 0) {
       auto elapsed = std::chrono::steady_clock::now() - start_time;
@@ -588,13 +594,15 @@ std::optional<std::vector<uint8_t>> TcpMaster::ReadFrame(uint32_t timeout_ms) {
       continue;
     }
 
-    size_t needed = total_size - frame.size();
+    size_t current_size = frame.size();
+    size_t needed = total_size - current_size;
     frame.resize(total_size);
-    int bytes_read = transport_.Read(std::span<uint8_t>(frame.data() + frame.size() - needed, needed));
+    int bytes_read = transport_.Read(std::span<uint8_t>(frame.data() + current_size, needed));
     if (bytes_read <= 0) {
+      frame.resize(current_size);  // Restore original size on error
       return {};
     }
-    frame.resize(frame.size() - needed + static_cast<size_t>(bytes_read));
+    frame.resize(current_size + static_cast<size_t>(bytes_read));
   }
 
   return frame;

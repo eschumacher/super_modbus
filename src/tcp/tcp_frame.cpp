@@ -134,7 +134,7 @@ std::vector<uint8_t> TcpFrame::EncodeResponse(const TcpResponse &response) {
   return frame;
 }
 
-std::optional<TcpRequest> TcpFrame::DecodeRequest(std::span<const uint8_t> frame) {
+std::optional<TcpRequest> TcpFrame::DecodeRequest(std::span<const uint8_t> frame, ByteOrder byte_order) {
   // Minimum frame: MBAP header (7) + function_code (1) = 8 bytes
   if (frame.size() < kMinFrameSize) {
     return {};
@@ -153,17 +153,12 @@ std::optional<TcpRequest> TcpFrame::DecodeRequest(std::span<const uint8_t> frame
   uint8_t unit_id = ExtractUnitId(frame);
 
   // Verify length matches frame size
-  // MBAP header = Transaction ID(2) + Protocol ID(2) + Length(2) + Unit ID(1) = 7 bytes
-  // Length field value = Unit ID(1) + PDU size
-  // PDU = Function Code + Data = (length - 1) bytes (since length includes Unit ID)
-  // Total frame size = 7 + (length - 1) = 6 + length
   if (frame.size() < static_cast<size_t>(6 + length)) {
     return {};
   }
 
-  // Extract PDU (starts after MBAP header)
   if (length < 1) {
-    return {};  // Must have at least Unit ID
+    return {};
   }
 
   size_t pdu_start = kMbapHeaderSize;
@@ -173,50 +168,47 @@ std::optional<TcpRequest> TcpFrame::DecodeRequest(std::span<const uint8_t> frame
 
   auto function_code = static_cast<FunctionCode>(frame[pdu_start]);
 
-  // Extract data (everything after function code in PDU)
   std::vector<uint8_t> data;
-  if (length > 1) {                 // More than just Unit ID
-    size_t data_size = length - 1;  // Length includes Unit ID, so subtract 1
-    if (data_size > 1) {            // More than just function code
-      data_size -= 1;               // Subtract function code
+  if (length > 1) {
+    size_t data_size = length - 1;
+    if (data_size > 1) {
+      data_size -= 1;
       if (pdu_start + 1 + data_size <= frame.size()) {
         data.assign(frame.begin() + pdu_start + 1, frame.begin() + pdu_start + 1 + static_cast<ssize_t>(data_size));
       }
     }
   }
 
-  TcpRequest request({transaction_id, unit_id, function_code});
+  TcpRequest request({transaction_id, unit_id, function_code}, byte_order);
   if (!data.empty()) {
-    // Try to parse as address span for read operations
     if (function_code == FunctionCode::kReadHR || function_code == FunctionCode::kReadIR ||
         function_code == FunctionCode::kReadCoils || function_code == FunctionCode::kReadDI) {
       if (data.size() >= 4) {
         AddressSpan span;
-        span.start_address = MakeInt16(data[1], data[0]);
-        span.reg_count = MakeInt16(data[3], data[2]);
+        span.start_address = static_cast<uint16_t>(DecodeU16(data[0], data[1], byte_order));
+        span.reg_count = static_cast<uint16_t>(DecodeU16(data[2], data[3], byte_order));
         request.SetAddressSpan(span);
       } else {
         request.SetRawData(data);
       }
     } else if (function_code == FunctionCode::kWriteSingleReg) {
       if (data.size() >= 4) {
-        uint16_t address = MakeInt16(data[1], data[0]);
-        int16_t value = MakeInt16(data[3], data[2]);
+        uint16_t address = static_cast<uint16_t>(DecodeU16(data[0], data[1], byte_order));
+        int16_t value = static_cast<int16_t>(DecodeU16(data[2], data[3], byte_order));
         request.SetWriteSingleRegisterData(address, value);
       } else {
         request.SetRawData(data);
       }
     } else if (function_code == FunctionCode::kWriteSingleCoil) {
       if (data.size() >= 4) {
-        uint16_t address = MakeInt16(data[1], data[0]);
-        uint16_t value = MakeInt16(data[3], data[2]);
+        uint16_t address = static_cast<uint16_t>(DecodeU16(data[0], data[1], byte_order));
+        uint16_t value = static_cast<uint16_t>(DecodeU16(data[2], data[3], byte_order));
         bool coil_value = (value == kCoilOnValue);
         request.SetWriteSingleCoilData(address, coil_value);
       } else {
         request.SetRawData(data);
       }
     } else {
-      // For write multiple operations and other function codes, store raw data
       request.SetRawData(data);
     }
   }

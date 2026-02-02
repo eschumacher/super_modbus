@@ -69,7 +69,7 @@ std::vector<uint8_t> RtuFrame::EncodeResponse(const RtuResponse &response) {
   return frame;
 }
 
-std::optional<RtuRequest> RtuFrame::DecodeRequest(std::span<const uint8_t> frame) {
+std::optional<RtuRequest> RtuFrame::DecodeRequest(std::span<const uint8_t> frame, ByteOrder byte_order) {
   // Minimum frame: slave_id (1) + function_code (1) + CRC (2) = 4 bytes
   if (frame.size() < kMinFrameSize) {
     return {};
@@ -91,31 +91,31 @@ std::optional<RtuRequest> RtuFrame::DecodeRequest(std::span<const uint8_t> frame
     data.assign(frame.begin() + 2, frame.begin() + 2 + static_cast<ssize_t>(data_size));
   }
 
-  RtuRequest request({slave_id, function_code});
+  RtuRequest request({slave_id, function_code}, byte_order);
   if (!data.empty()) {
     // Try to parse as address span for read operations
     if (function_code == FunctionCode::kReadHR || function_code == FunctionCode::kReadIR ||
         function_code == FunctionCode::kReadCoils || function_code == FunctionCode::kReadDI) {
       if (data.size() >= 4) {
         AddressSpan span;
-        span.start_address = MakeInt16(data[1], data[0]);
-        span.reg_count = MakeInt16(data[3], data[2]);
+        span.start_address = static_cast<uint16_t>(DecodeU16(data[0], data[1], byte_order));
+        span.reg_count = static_cast<uint16_t>(DecodeU16(data[2], data[3], byte_order));
         request.SetAddressSpan(span);
       } else {
         request.SetRawData(data);
       }
     } else if (function_code == FunctionCode::kWriteSingleReg) {
       if (data.size() >= 4) {
-        uint16_t address = MakeInt16(data[1], data[0]);
-        int16_t value = MakeInt16(data[3], data[2]);
+        uint16_t address = static_cast<uint16_t>(DecodeU16(data[0], data[1], byte_order));
+        int16_t value = static_cast<int16_t>(DecodeU16(data[2], data[3], byte_order));
         request.SetWriteSingleRegisterData(address, value);
       } else {
         request.SetRawData(data);
       }
     } else if (function_code == FunctionCode::kWriteSingleCoil) {
       if (data.size() >= 4) {
-        uint16_t address = MakeInt16(data[1], data[0]);
-        uint16_t value = MakeInt16(data[3], data[2]);
+        uint16_t address = static_cast<uint16_t>(DecodeU16(data[0], data[1], byte_order));
+        uint16_t value = static_cast<uint16_t>(DecodeU16(data[2], data[3], byte_order));
         bool coil_value = (value == kCoilOnValue);
         request.SetWriteSingleCoilData(address, coil_value);
       } else {

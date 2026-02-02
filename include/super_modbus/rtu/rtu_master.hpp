@@ -22,6 +22,7 @@ struct hash<std::pair<uint16_t, uint16_t>> {
 #include "../common/address_span.hpp"
 #include "../common/exception_code.hpp"
 #include "../common/function_code.hpp"
+#include "../common/wire_format_options.hpp"
 #include "../transport/byte_reader.hpp"
 #include "../transport/byte_writer.hpp"
 #include "rtu_frame.hpp"
@@ -42,9 +43,11 @@ class RtuMaster {
   /**
    * @brief Construct a Modbus RTU Master
    * @param transport Transport layer for byte I/O
+   * @param options Wire format options (byte/word order); default is standard Modbus (BigEndian)
    */
-  explicit RtuMaster(ByteTransport &transport)
-      : transport_(transport) {}
+  explicit RtuMaster(ByteTransport &transport, WireFormatOptions options = {})
+      : transport_(transport),
+        options_(options) {}
 
   /**
    * @brief Read holding registers from a slave
@@ -55,6 +58,25 @@ class RtuMaster {
    */
   [[nodiscard]] std::optional<std::vector<int16_t>> ReadHoldingRegisters(uint8_t slave_id, uint16_t start_address,
                                                                          uint16_t count);
+
+  /**
+   * @brief Read 32-bit floats from holding registers (Enron-style; two registers per float).
+   * @param slave_id Target slave device ID
+   * @param start_address Starting register address
+   * @param count Number of floats to read (if float_count_semantics is CountIsFloatCount) or number of registers (if
+   * CountIsRegisterCount)
+   * @return Vector of float values, or empty if error
+   */
+  [[nodiscard]] std::optional<std::vector<float>> ReadFloats(uint8_t slave_id, uint16_t start_address, uint16_t count);
+
+  /**
+   * @brief Write 32-bit floats to holding registers (two registers per float).
+   * @param slave_id Target slave device ID
+   * @param start_address Starting register address
+   * @param values Float values to write
+   * @return true on success, false on error
+   */
+  [[nodiscard]] bool WriteFloats(uint8_t slave_id, uint16_t start_address, std::span<const float> values);
 
   /**
    * @brief Read input registers from a slave
@@ -234,6 +256,7 @@ class RtuMaster {
   [[nodiscard]] std::optional<std::vector<uint8_t>> ReadFrame(uint32_t timeout_ms = 1000);
 
   ByteTransport &transport_;
+  WireFormatOptions options_;
 };
 
 }  // namespace supermb

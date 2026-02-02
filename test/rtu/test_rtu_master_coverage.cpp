@@ -6,6 +6,7 @@
 #include "super_modbus/common/byte_helpers.hpp"
 #include "super_modbus/common/exception_code.hpp"
 #include "super_modbus/common/function_code.hpp"
+#include "super_modbus/common/wire_format_options.hpp"
 #include "super_modbus/rtu/rtu_frame.hpp"
 #include "super_modbus/rtu/rtu_master.hpp"
 #include "super_modbus/rtu/rtu_request.hpp"
@@ -25,6 +26,7 @@ using supermb::RtuMaster;
 using supermb::RtuRequest;
 using supermb::RtuResponse;
 using supermb::RtuSlave;
+using supermb::WireFormatOptions;
 
 // Mock transport that can simulate write failures
 class FailingTransport : public supermb::ByteTransport {
@@ -1320,8 +1322,8 @@ TEST(RtuMasterCoverage, GetComEventCounter_Success) {
   RtuResponse response{kSlaveId, FunctionCode::kGetComEventCounter};
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
   response.EmplaceBack(0x00);  // Status
-  response.EmplaceBack(0x05);  // Event count low byte
-  response.EmplaceBack(0x00);  // Event count high byte (MakeInt16(low, high) = 5)
+  response.EmplaceBack(0x00);  // Event count high byte (big-endian)
+  response.EmplaceBack(0x05);  // Event count low byte (value = 5)
 
   auto frame = RtuFrame::EncodeResponse(response);
   transport.SetReadData(frame);
@@ -1533,4 +1535,101 @@ TEST(RtuMasterCoverage, ReadFrame_PartialReads) {
   ASSERT_TRUE(result.has_value());
   EXPECT_EQ(result->GetSlaveId(), kSlaveId);
   EXPECT_EQ(result->GetFunctionCode(), FunctionCode::kReadHR);
+}
+
+// ReadFloats / WriteFloats (Enron-style 32-bit float API)
+TEST(RtuMasterCoverage, ReadFloats_Success) {
+  static constexpr uint8_t kSlaveId{1};
+  MemoryTransport transport;
+  RtuMaster master{transport};
+
+  // Response: 4 registers (2 floats), big-endian high-word-first. 1.0f=0x3F800000, 2.0f=0x40000000
+  RtuResponse response{kSlaveId, FunctionCode::kReadHR};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  response.EmplaceBack(8);  // byte_count
+  response.EmplaceBack(0x3F);
+  response.EmplaceBack(0x80);
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x40);
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x00);
+
+  auto frame = RtuFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  auto result = master.ReadFloats(kSlaveId, 0, 2);  // count = 2 floats (CountIsFloatCount default)
+  ASSERT_TRUE(result.has_value());
+  ASSERT_EQ(result->size(), 2);
+  EXPECT_FLOAT_EQ((*result)[0], 1.0f);
+  EXPECT_FLOAT_EQ((*result)[1], 2.0f);
+}
+
+TEST(RtuMasterCoverage, ReadFloats_NoResponse) {
+  static constexpr uint8_t kSlaveId{1};
+  MemoryTransport transport;  // no read data
+  RtuMaster master{transport};
+  auto result = master.ReadFloats(kSlaveId, 0, 2);
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST(RtuMasterCoverage, ReadFloats_CountZero) {
+  static constexpr uint8_t kSlaveId{1};
+  MemoryTransport transport;
+  RtuMaster master{transport};
+  auto result = master.ReadFloats(kSlaveId, 0, 0);
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST(RtuMasterCoverage, WriteFloats_Success) {
+  static constexpr uint8_t kSlaveId{1};
+  MemoryTransport transport;
+  RtuMaster master{transport};
+
+  RtuResponse response{kSlaveId, FunctionCode::kWriteMultRegs};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x04);  // 4 registers written
+
+  auto frame = RtuFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  std::vector<float> values{1.0f, 2.0f};
+  bool ok = master.WriteFloats(kSlaveId, 0, values);
+  EXPECT_TRUE(ok);
+}
+
+TEST(RtuMasterCoverage, WriteFloats_Empty) {
+  static constexpr uint8_t kSlaveId{1};
+  MemoryTransport transport;
+  RtuMaster master{transport};
+  std::vector<float> values;
+  bool ok = master.WriteFloats(kSlaveId, 0, values);
+  EXPECT_TRUE(ok);  // empty write is success per implementation
+}
+
+TEST(RtuMasterCoverage, ReadFloats_FloatRangeOutOfRange) {
+  static constexpr uint8_t kSlaveId{1};
+  MemoryTransport transport;
+  WireFormatOptions opts;
+  opts.float_range = {10, 10};  // registers 10..19 only
+  RtuMaster master{transport, opts};
+  auto result = master.ReadFloats(kSlaveId, 0, 2);  // start 0 is outside range
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST(RtuMasterCoverage, WriteFloats_FloatRangeOutOfRange) {
+  static constexpr uint8_t kSlaveId{1};
+  MemoryTransport transport;
+  WireFormatOptions opts;
+  opts.float_range = {10, 10};
+  RtuMaster master{transport, opts};
+  std::vector<float> values{1.0f};
+  bool ok = master.WriteFloats(kSlaveId, 0, values);  // start 0 outside range
+  EXPECT_FALSE(ok);
 }

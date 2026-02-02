@@ -35,6 +35,7 @@ add_executable(run_tests
     tcp/test_tcp_request_edge_cases.cpp
     tcp/test_tcp_master_coverage.cpp
     tcp/test_tcp_slave_coverage.cpp
+    common/test_byte_helpers.cpp
     common/test_common_utilities.cpp
     common/test_crc16.cpp
     transport/test_memory_transport.cpp

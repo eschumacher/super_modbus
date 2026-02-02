@@ -1209,3 +1209,192 @@ TEST(TCPSlaveCoverage, ProcessReadFileRecord_Success) {
   EXPECT_EQ(read_resp.GetExceptionCode(), ExceptionCode::kAcknowledge);
   EXPECT_GT(read_resp.GetData().size(), 0);
 }
+
+// Float range: AddFloatRange, SetFloat, ReadHR from float range, WriteMultRegs to float range
+TEST(TCPSlaveCoverage, AddFloatRange_SetFloat_ReadHoldingRegistersFromFloatRange) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddFloatRange(0, 4);
+  ASSERT_TRUE(slave.SetFloat(0, 1.0f));
+  ASSERT_TRUE(slave.SetFloat(1, 2.0f));
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kReadHR}};
+  request.SetAddressSpan({0, 4});
+  TcpResponse response = slave.Process(request);
+
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  auto data = response.GetData();
+  ASSERT_GE(data.size(), 9u);
+  EXPECT_EQ(data[0], 8);
+  float f0 = supermb::DecodeFloat(&data[1], supermb::ByteOrder::BigEndian, supermb::WordOrder::HighWordFirst);
+  float f1 = supermb::DecodeFloat(&data[5], supermb::ByteOrder::BigEndian, supermb::WordOrder::HighWordFirst);
+  EXPECT_FLOAT_EQ(f0, 1.0f);
+  EXPECT_FLOAT_EQ(f1, 2.0f);
+}
+
+TEST(TCPSlaveCoverage, AddFloatRange_WriteMultipleRegistersToFloatRange) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddFloatRange(0, 4);
+  slave.SetFloat(0, 0.0f);
+  slave.SetFloat(1, 0.0f);
+
+  uint8_t buf[8];
+  supermb::EncodeFloat(1.5f, supermb::ByteOrder::BigEndian, supermb::WordOrder::HighWordFirst, buf);
+  supermb::EncodeFloat(2.5f, supermb::ByteOrder::BigEndian, supermb::WordOrder::HighWordFirst, buf + 4);
+  std::vector<int16_t> regs(4);
+  regs[0] = static_cast<int16_t>(supermb::DecodeU16(buf[0], buf[1], supermb::ByteOrder::BigEndian));
+  regs[1] = static_cast<int16_t>(supermb::DecodeU16(buf[2], buf[3], supermb::ByteOrder::BigEndian));
+  regs[2] = static_cast<int16_t>(supermb::DecodeU16(buf[4], buf[5], supermb::ByteOrder::BigEndian));
+  regs[3] = static_cast<int16_t>(supermb::DecodeU16(buf[6], buf[7], supermb::ByteOrder::BigEndian));
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kWriteMultRegs}};
+  request.SetWriteMultipleRegistersData(0, 4, regs);
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+
+  TcpRequest read_req{{2, kUnitId, FunctionCode::kReadHR}};
+  read_req.SetAddressSpan({0, 4});
+  TcpResponse read_resp = slave.Process(read_req);
+  ASSERT_EQ(read_resp.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  auto data = read_resp.GetData();
+  ASSERT_GE(data.size(), 9u);
+  EXPECT_FLOAT_EQ(supermb::DecodeFloat(&data[1], supermb::ByteOrder::BigEndian, supermb::WordOrder::HighWordFirst),
+                  1.5f);
+  EXPECT_FLOAT_EQ(supermb::DecodeFloat(&data[5], supermb::ByteOrder::BigEndian, supermb::WordOrder::HighWordFirst),
+                  2.5f);
+}
+
+TEST(TCPSlaveCoverage, WriteSingleRegister_AddressInFloatRange_IllegalDataAddress) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddFloatRange(0, 4);
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kWriteSingleReg}};
+  request.SetWriteSingleRegisterData(0, 0x1234);
+  TcpResponse response = slave.Process(request);
+
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kIllegalDataAddress);
+}
+
+TEST(TCPSlaveCoverage, SetFloat_OutOfRange) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddFloatRange(0, 4);
+  EXPECT_FALSE(slave.SetFloat(2, 1.0f));
+  EXPECT_TRUE(slave.SetFloat(1, 1.0f));
+}
+
+// Read coils with some true to cover current_byte |= (1 << bit_position)
+TEST(TCPSlaveCoverage, ProcessReadCoils_WithTrueCoils) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddCoils({0, 8});
+
+  TcpRequest write_req{{1, kUnitId, FunctionCode::kWriteSingleCoil}};
+  write_req.SetWriteSingleCoilData(0, true);
+  slave.Process(write_req);
+  write_req.SetWriteSingleCoilData(2, true);
+  slave.Process(write_req);
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kReadCoils}};
+  request.SetAddressSpan({0, 8});
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  auto data = response.GetData();
+  ASSERT_GE(data.size(), 2u);
+  EXPECT_EQ(data[1], 0x05);  // Bits 0 and 2 set
+}
+
+// Write multiple registers overlapping float range -> IllegalDataAddress
+TEST(TCPSlaveCoverage, ProcessWriteMultipleRegisters_FloatRangeOverlap) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddFloatRange(10, 4);
+  slave.AddHoldingRegisters({0, 20});
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kWriteMultRegs}};
+  std::vector<int16_t> vals{0x11, 0x22, 0x33, 0x44};
+  request.SetWriteMultipleRegistersData(8, 4, vals);
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kIllegalDataAddress);
+}
+
+// Read file record: byte_count=6, 6 payload bytes -> data_offset(1)+7 > size(7) for TCP (7-byte sub-request)
+TEST(TCPSlaveCoverage, ProcessReadFileRecord_InsufficientDataForOneRecord) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kReadFileRecord}};
+  std::vector<uint8_t> data;
+  data.push_back(6);     // byte_count = 6 (TCP needs 7 per record: ref_type+file+record+length)
+  data.push_back(0x06);  // reference_type
+  data.push_back(0);
+  data.push_back(1);
+  data.push_back(0);
+  data.push_back(0);
+  data.push_back(0);  // Only 6 bytes after byte_count; first record needs 7
+  request.SetRawData(data);
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kIllegalDataValue);
+}
+
+// ReadWriteMultipleRegisters with both read and write in float range
+TEST(TCPSlaveCoverage, ProcessReadWriteMultipleRegisters_FloatRangeWriteAndRead) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddFloatRange(0, 4);
+  slave.SetFloat(0, 1.0f);
+  slave.SetFloat(1, 2.0f);
+
+  uint8_t write_buf[8];
+  supermb::EncodeFloat(3.0f, supermb::ByteOrder::BigEndian, supermb::WordOrder::HighWordFirst, write_buf);
+  supermb::EncodeFloat(4.0f, supermb::ByteOrder::BigEndian, supermb::WordOrder::HighWordFirst, write_buf + 4);
+
+  std::vector<uint8_t> raw_data;
+  raw_data.push_back(0x00);
+  raw_data.push_back(0x00);  // read_start = 0
+  raw_data.push_back(0x00);
+  raw_data.push_back(0x04);  // read_count = 4
+  raw_data.push_back(0x00);
+  raw_data.push_back(0x00);  // write_start = 0
+  raw_data.push_back(0x00);
+  raw_data.push_back(0x04);  // write_count = 4
+  raw_data.push_back(0x08);  // write_byte_count = 8
+  raw_data.insert(raw_data.end(), write_buf, write_buf + 8);
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kReadWriteMultRegs}};
+  request.SetRawData(raw_data);
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  auto resp_data = response.GetData();
+  ASSERT_GE(resp_data.size(), 9u);
+  EXPECT_EQ(resp_data[0], 8);
+  float r0 = supermb::DecodeFloat(&resp_data[1], supermb::ByteOrder::BigEndian, supermb::WordOrder::HighWordFirst);
+  float r1 = supermb::DecodeFloat(&resp_data[5], supermb::ByteOrder::BigEndian, supermb::WordOrder::HighWordFirst);
+  EXPECT_FLOAT_EQ(r0, 3.0f);
+  EXPECT_FLOAT_EQ(r1, 4.0f);
+}
+
+// Com event log fill via ProcessIncomingFrame to cover erase path
+TEST(TCPSlaveCoverage, ComEventLog_MaxSize_ViaProcessIncomingFrame) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpSlave slave{kUnitId};
+  slave.AddHoldingRegisters({0, 10});
+
+  for (int i = 0; i < 66; ++i) {
+    TcpRequest request{{1, kUnitId, FunctionCode::kReadHR}};
+    request.SetAddressSpan({0, 1});
+    auto frame = TcpFrame::EncodeRequest(request);
+    transport.SetReadData(frame);
+    transport.ResetReadPosition();
+    bool ok = slave.ProcessIncomingFrame(transport, 100);
+    EXPECT_TRUE(ok);
+  }
+}

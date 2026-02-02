@@ -39,10 +39,10 @@ TEST(EventLog, EventLogPopulation) {
   auto data = log_resp.GetData();
   ASSERT_GE(data.size(), 5);
 
-  // Verify structure
+  // Verify structure (standard Modbus big-endian: high byte first)
   EXPECT_EQ(data[0], 0x00);  // Status
-  uint16_t event_count = (static_cast<uint16_t>(data[2]) << 8) | data[1];
-  uint16_t message_count = (static_cast<uint16_t>(data[4]) << 8) | data[3];
+  uint16_t event_count = (static_cast<uint16_t>(data[1]) << 8) | data[2];
+  uint16_t message_count = (static_cast<uint16_t>(data[3]) << 8) | data[4];
 
   EXPECT_GE(event_count, 3);
   EXPECT_GE(message_count, 3);
@@ -76,8 +76,8 @@ TEST(EventLog, EventLogOverflow) {
   auto data = log_resp.GetData();
   ASSERT_GE(data.size(), 5);
 
-  uint16_t event_count = (static_cast<uint16_t>(data[2]) << 8) | data[1];
-  uint16_t message_count = (static_cast<uint16_t>(data[4]) << 8) | data[3];
+  uint16_t event_count = (static_cast<uint16_t>(data[1]) << 8) | data[2];
+  uint16_t message_count = (static_cast<uint16_t>(data[3]) << 8) | data[4];
 
   // Event count should continue incrementing
   EXPECT_GE(event_count, 70);
@@ -114,11 +114,11 @@ TEST(EventLog, EventLogContent) {
   auto data = log_resp.GetData();
   ASSERT_GE(data.size(), 5);
 
-  // Check that event log contains entries
+  // Check that event log contains entries (big-endian: high byte first)
   if (data.size() > 8) {
     // First entry should be recent
-    uint16_t event_id1 = (static_cast<uint16_t>(data[6]) << 8) | data[5];
-    uint16_t event_count1 = (static_cast<uint16_t>(data[8]) << 8) | data[7];
+    uint16_t event_id1 = (static_cast<uint16_t>(data[5]) << 8) | data[6];
+    uint16_t event_count1 = (static_cast<uint16_t>(data[7]) << 8) | data[8];
 
     // Event ID should be a function code
     EXPECT_GT(event_id1, 0);
@@ -148,7 +148,7 @@ TEST(EventLog, MessageCountTracking) {
   auto data = log_resp.GetData();
   ASSERT_GE(data.size(), 5);
 
-  uint16_t message_count = (static_cast<uint16_t>(data[4]) << 8) | data[3];
+  uint16_t message_count = (static_cast<uint16_t>(data[3]) << 8) | data[4];
   EXPECT_GE(message_count, 11);  // 10 read requests + 1 event log request
 }
 
@@ -171,8 +171,8 @@ TEST(EventLog, EventLogAfterException) {
   auto data = log_resp.GetData();
   ASSERT_GE(data.size(), 5);
 
-  uint16_t event_count = (static_cast<uint16_t>(data[2]) << 8) | data[1];
-  uint16_t message_count = (static_cast<uint16_t>(data[4]) << 8) | data[3];
+  uint16_t event_count = (static_cast<uint16_t>(data[1]) << 8) | data[2];
+  uint16_t message_count = (static_cast<uint16_t>(data[3]) << 8) | data[4];
 
   EXPECT_GE(event_count, 1);
   EXPECT_GE(message_count, 2);  // Bad request + event log request

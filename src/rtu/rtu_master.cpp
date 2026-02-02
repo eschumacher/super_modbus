@@ -21,7 +21,7 @@ namespace supermb {
 
 std::optional<std::vector<int16_t>> RtuMaster::ReadHoldingRegisters(uint8_t slave_id, uint16_t start_address,
                                                                     uint16_t count) {
-  RtuRequest request({slave_id, FunctionCode::kReadHR});
+  RtuRequest request({slave_id, FunctionCode::kReadHR}, options_.byte_order);
   AddressSpan span{start_address, count};
   if (!request.SetAddressSpan(span)) {
     return {};
@@ -51,8 +51,7 @@ std::optional<std::vector<int16_t>> RtuMaster::ReadHoldingRegisters(uint8_t slav
   registers.reserve(count);
   for (size_t i = 0; i < count; ++i) {
     size_t byte_idx = 1 + i * 2;  // Skip byte_count field
-    // Modbus RTU uses big-endian: high byte first, then low byte
-    int16_t value = MakeInt16(data[byte_idx + 1], data[byte_idx]);
+    int16_t value = static_cast<int16_t>(DecodeU16(data[byte_idx], data[byte_idx + 1], options_.byte_order));
     registers.push_back(value);
   }
 
@@ -61,7 +60,7 @@ std::optional<std::vector<int16_t>> RtuMaster::ReadHoldingRegisters(uint8_t slav
 
 std::optional<std::vector<int16_t>> RtuMaster::ReadInputRegisters(uint8_t slave_id, uint16_t start_address,
                                                                   uint16_t count) {
-  RtuRequest request({slave_id, FunctionCode::kReadIR});
+  RtuRequest request({slave_id, FunctionCode::kReadIR}, options_.byte_order);
   AddressSpan span{start_address, count};
   if (!request.SetAddressSpan(span)) {
     return {};
@@ -91,16 +90,73 @@ std::optional<std::vector<int16_t>> RtuMaster::ReadInputRegisters(uint8_t slave_
   registers.reserve(count);
   for (size_t i = 0; i < count; ++i) {
     size_t byte_idx = 1 + i * 2;  // Skip byte_count field
-    // Modbus RTU uses big-endian: high byte first, then low byte
-    int16_t value = MakeInt16(data[byte_idx + 1], data[byte_idx]);
+    int16_t value = static_cast<int16_t>(DecodeU16(data[byte_idx], data[byte_idx + 1], options_.byte_order));
     registers.push_back(value);
   }
 
   return registers;
 }
 
+std::optional<std::vector<float>> RtuMaster::ReadFloats(uint8_t slave_id, uint16_t start_address, uint16_t count) {
+  const auto semantics = options_.float_count_semantics.value_or(FloatCountSemantics::CountIsFloatCount);
+  uint16_t num_registers;
+  size_t num_floats;
+  if (semantics == FloatCountSemantics::CountIsFloatCount) {
+    num_registers = count * 2;
+    num_floats = count;
+  } else {
+    num_registers = count;
+    num_floats = count / 2;
+  }
+  if (num_floats == 0 || num_registers < 2) {
+    return {};
+  }
+  if (options_.float_range.has_value()) {
+    const auto [range_start, range_count] = *options_.float_range;
+    if (start_address < range_start || start_address + num_registers > range_start + range_count) {
+      return {};
+    }
+  }
+  auto regs = ReadHoldingRegisters(slave_id, start_address, num_registers);
+  if (!regs.has_value() || regs->size() < num_registers) {
+    return {};
+  }
+  std::vector<float> out;
+  out.reserve(num_floats);
+  for (size_t i = 0; i + 1 < regs->size(); i += 2) {
+    uint8_t buf[4];
+    EncodeU16(static_cast<uint16_t>(regs->at(i) & 0xFFFF), options_.byte_order, buf);
+    EncodeU16(static_cast<uint16_t>(regs->at(i + 1) & 0xFFFF), options_.byte_order, buf + 2);
+    out.push_back(DecodeFloat(buf, options_.byte_order, options_.word_order));
+  }
+  return out;
+}
+
+bool RtuMaster::WriteFloats(uint8_t slave_id, uint16_t start_address, std::span<const float> values) {
+  const size_t num_floats = values.size();
+  if (num_floats == 0) {
+    return true;
+  }
+  const uint16_t num_registers = static_cast<uint16_t>(num_floats * 2);
+  if (options_.float_range.has_value()) {
+    const auto [range_start, range_count] = *options_.float_range;
+    if (start_address < range_start || start_address + num_registers > range_start + range_count) {
+      return false;
+    }
+  }
+  std::vector<int16_t> regs;
+  regs.reserve(num_registers);
+  for (float f : values) {
+    uint8_t buf[4];
+    EncodeFloat(f, options_.byte_order, options_.word_order, buf);
+    regs.push_back(static_cast<int16_t>(DecodeU16(buf[0], buf[1], options_.byte_order)));
+    regs.push_back(static_cast<int16_t>(DecodeU16(buf[2], buf[3], options_.byte_order)));
+  }
+  return WriteMultipleRegisters(slave_id, start_address, regs);
+}
+
 bool RtuMaster::WriteSingleRegister(uint8_t slave_id, uint16_t address, int16_t value) {
-  RtuRequest request({slave_id, FunctionCode::kWriteSingleReg});
+  RtuRequest request({slave_id, FunctionCode::kWriteSingleReg}, options_.byte_order);
   if (!request.SetWriteSingleRegisterData(address, value)) {
     return false;
   }
@@ -114,7 +170,7 @@ bool RtuMaster::WriteSingleRegister(uint8_t slave_id, uint16_t address, int16_t 
 }
 
 std::optional<std::vector<bool>> RtuMaster::ReadCoils(uint8_t slave_id, uint16_t start_address, uint16_t count) {
-  RtuRequest request({slave_id, FunctionCode::kReadCoils});
+  RtuRequest request({slave_id, FunctionCode::kReadCoils}, options_.byte_order);
   AddressSpan span{start_address, count};
   if (!request.SetAddressSpan(span)) {
     return {};
@@ -153,7 +209,7 @@ std::optional<std::vector<bool>> RtuMaster::ReadCoils(uint8_t slave_id, uint16_t
 
 std::optional<std::vector<bool>> RtuMaster::ReadDiscreteInputs(uint8_t slave_id, uint16_t start_address,
                                                                uint16_t count) {
-  RtuRequest request({slave_id, FunctionCode::kReadDI});
+  RtuRequest request({slave_id, FunctionCode::kReadDI}, options_.byte_order);
   AddressSpan span{start_address, count};
   if (!request.SetAddressSpan(span)) {
     return {};
@@ -191,7 +247,7 @@ std::optional<std::vector<bool>> RtuMaster::ReadDiscreteInputs(uint8_t slave_id,
 }
 
 bool RtuMaster::WriteSingleCoil(uint8_t slave_id, uint16_t address, bool value) {
-  RtuRequest request({slave_id, FunctionCode::kWriteSingleCoil});
+  RtuRequest request({slave_id, FunctionCode::kWriteSingleCoil}, options_.byte_order);
   if (!request.SetWriteSingleCoilData(address, value)) {
     return false;
   }
@@ -205,7 +261,7 @@ bool RtuMaster::WriteSingleCoil(uint8_t slave_id, uint16_t address, bool value) 
 }
 
 bool RtuMaster::WriteMultipleRegisters(uint8_t slave_id, uint16_t start_address, std::span<const int16_t> values) {
-  RtuRequest request({slave_id, FunctionCode::kWriteMultRegs});
+  RtuRequest request({slave_id, FunctionCode::kWriteMultRegs}, options_.byte_order);
   if (!request.SetWriteMultipleRegistersData(start_address, static_cast<uint16_t>(values.size()), values)) {
     return false;
   }
@@ -219,7 +275,7 @@ bool RtuMaster::WriteMultipleRegisters(uint8_t slave_id, uint16_t start_address,
 }
 
 bool RtuMaster::WriteMultipleCoils(uint8_t slave_id, uint16_t start_address, std::span<const bool> values) {
-  RtuRequest request({slave_id, FunctionCode::kWriteMultCoils});
+  RtuRequest request({slave_id, FunctionCode::kWriteMultCoils}, options_.byte_order);
   if (!request.SetWriteMultipleCoilsData(start_address, static_cast<uint16_t>(values.size()), values)) {
     return false;
   }
@@ -233,7 +289,7 @@ bool RtuMaster::WriteMultipleCoils(uint8_t slave_id, uint16_t start_address, std
 }
 
 std::optional<uint8_t> RtuMaster::ReadExceptionStatus(uint8_t slave_id) {
-  RtuRequest request({slave_id, FunctionCode::kReadExceptionStatus});
+  RtuRequest request({slave_id, FunctionCode::kReadExceptionStatus}, options_.byte_order);
   auto response = SendRequest(request);
   if (!response.has_value()) {
     return {};
@@ -250,7 +306,7 @@ std::optional<uint8_t> RtuMaster::ReadExceptionStatus(uint8_t slave_id) {
 
 std::optional<std::vector<uint8_t>> RtuMaster::Diagnostics(uint8_t slave_id, uint16_t sub_function_code,
                                                            std::span<const uint8_t> data) {
-  RtuRequest request({slave_id, FunctionCode::kDiagnostics});
+  RtuRequest request({slave_id, FunctionCode::kDiagnostics}, options_.byte_order);
   if (!request.SetDiagnosticsData(sub_function_code, data)) {
     return {};
   }
@@ -265,7 +321,7 @@ std::optional<std::vector<uint8_t>> RtuMaster::Diagnostics(uint8_t slave_id, uin
 }
 
 std::optional<std::pair<uint8_t, uint16_t>> RtuMaster::GetComEventCounter(uint8_t slave_id) {
-  RtuRequest request({slave_id, FunctionCode::kGetComEventCounter});
+  RtuRequest request({slave_id, FunctionCode::kGetComEventCounter}, options_.byte_order);
   auto response = SendRequest(request);
   if (!response.has_value()) {
     return {};
@@ -278,12 +334,12 @@ std::optional<std::pair<uint8_t, uint16_t>> RtuMaster::GetComEventCounter(uint8_
     return {};
   }
   uint8_t status = response_data[0];
-  uint16_t event_count = MakeInt16(response_data[1], response_data[2]);
+  uint16_t event_count = static_cast<uint16_t>(DecodeU16(response_data[1], response_data[2], options_.byte_order));
   return std::make_pair(status, event_count);
 }
 
 std::optional<std::vector<uint8_t>> RtuMaster::GetComEventLog(uint8_t slave_id) {
-  RtuRequest request({slave_id, FunctionCode::kGetComEventLog});
+  RtuRequest request({slave_id, FunctionCode::kGetComEventLog}, options_.byte_order);
   auto response = SendRequest(request);
   if (!response.has_value()) {
     return {};
@@ -295,7 +351,7 @@ std::optional<std::vector<uint8_t>> RtuMaster::GetComEventLog(uint8_t slave_id) 
 }
 
 std::optional<std::vector<uint8_t>> RtuMaster::ReportSlaveID(uint8_t slave_id) {
-  RtuRequest request({slave_id, FunctionCode::kReportSlaveID});
+  RtuRequest request({slave_id, FunctionCode::kReportSlaveID}, options_.byte_order);
   auto response = SendRequest(request);
   if (!response.has_value()) {
     return {};
@@ -307,7 +363,7 @@ std::optional<std::vector<uint8_t>> RtuMaster::ReportSlaveID(uint8_t slave_id) {
 }
 
 bool RtuMaster::MaskWriteRegister(uint8_t slave_id, uint16_t address, uint16_t and_mask, uint16_t or_mask) {
-  RtuRequest request({slave_id, FunctionCode::kMaskWriteReg});
+  RtuRequest request({slave_id, FunctionCode::kMaskWriteReg}, options_.byte_order);
   if (!request.SetMaskWriteRegisterData(address, and_mask, or_mask)) {
     return false;
   }
@@ -323,16 +379,16 @@ bool RtuMaster::MaskWriteRegister(uint8_t slave_id, uint16_t address, uint16_t a
   if (response_data.size() < 6) {
     return false;
   }
-  uint16_t resp_address = MakeInt16(response_data[1], response_data[0]);
-  uint16_t resp_and = MakeInt16(response_data[3], response_data[2]);
-  uint16_t resp_or = MakeInt16(response_data[5], response_data[4]);
+  uint16_t resp_address = static_cast<uint16_t>(DecodeU16(response_data[0], response_data[1], options_.byte_order));
+  uint16_t resp_and = static_cast<uint16_t>(DecodeU16(response_data[2], response_data[3], options_.byte_order));
+  uint16_t resp_or = static_cast<uint16_t>(DecodeU16(response_data[4], response_data[5], options_.byte_order));
   return (resp_address == address && resp_and == and_mask && resp_or == or_mask);
 }
 
 std::optional<std::vector<int16_t>> RtuMaster::ReadWriteMultipleRegisters(uint8_t slave_id, uint16_t read_start,
                                                                           uint16_t read_count, uint16_t write_start,
                                                                           std::span<const int16_t> write_values) {
-  RtuRequest request({slave_id, FunctionCode::kReadWriteMultRegs});
+  RtuRequest request({slave_id, FunctionCode::kReadWriteMultRegs}, options_.byte_order);
   if (!request.SetReadWriteMultipleRegistersData(read_start, read_count, write_start,
                                                  static_cast<uint16_t>(write_values.size()), write_values)) {
     return {};
@@ -352,15 +408,14 @@ std::optional<std::vector<int16_t>> RtuMaster::ReadWriteMultipleRegisters(uint8_
   registers.reserve(read_count);
   for (size_t i = 0; i < read_count; ++i) {
     size_t byte_idx = i * 2;
-    // Modbus RTU uses big-endian: high byte first, then low byte
-    int16_t value = MakeInt16(data[byte_idx + 1], data[byte_idx]);
+    int16_t value = static_cast<int16_t>(DecodeU16(data[byte_idx], data[byte_idx + 1], options_.byte_order));
     registers.push_back(value);
   }
   return registers;
 }
 
 std::optional<std::vector<int16_t>> RtuMaster::ReadFIFOQueue(uint8_t slave_id, uint16_t fifo_address) {
-  RtuRequest request({slave_id, FunctionCode::kReadFIFOQueue});
+  RtuRequest request({slave_id, FunctionCode::kReadFIFOQueue}, options_.byte_order);
   if (!request.SetReadFIFOQueueData(fifo_address)) {
     return {};
   }
@@ -375,11 +430,7 @@ std::optional<std::vector<int16_t>> RtuMaster::ReadFIFOQueue(uint8_t slave_id, u
   if (data.size() < 4) {
     return {};
   }
-  // Skip byte count (2 bytes) and FIFO count (2 bytes)
-  // Modbus RTU uses big-endian: high byte first, then low byte
-  // Slave sends [high_byte_count, low_byte_count, high_fifo_count, low_fifo_count]
-  // MakeInt16 takes (low_byte, high_byte), so we need MakeInt16(low_fifo_count, high_fifo_count)
-  uint16_t fifo_count = MakeInt16(data[3], data[2]);
+  uint16_t fifo_count = static_cast<uint16_t>(DecodeU16(data[2], data[3], options_.byte_order));
   if (data.size() < static_cast<size_t>(4 + fifo_count * 2)) {
     return {};
   }
@@ -387,8 +438,7 @@ std::optional<std::vector<int16_t>> RtuMaster::ReadFIFOQueue(uint8_t slave_id, u
   fifo_data.reserve(fifo_count);
   for (size_t i = 0; i < fifo_count; ++i) {
     size_t byte_idx = 4 + i * 2;
-    // Modbus RTU uses big-endian: high byte first, then low byte
-    int16_t value = MakeInt16(data[byte_idx + 1], data[byte_idx]);
+    int16_t value = static_cast<int16_t>(DecodeU16(data[byte_idx], data[byte_idx + 1], options_.byte_order));
     fifo_data.push_back(value);
   }
   return fifo_data;
@@ -396,7 +446,7 @@ std::optional<std::vector<int16_t>> RtuMaster::ReadFIFOQueue(uint8_t slave_id, u
 
 std::optional<std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int16_t>>> RtuMaster::ReadFileRecord(
     uint8_t slave_id, std::span<const std::tuple<uint16_t, uint16_t, uint16_t>> file_records) {
-  RtuRequest request({slave_id, FunctionCode::kReadFileRecord});
+  RtuRequest request({slave_id, FunctionCode::kReadFileRecord}, options_.byte_order);
   if (!request.SetReadFileRecordData(file_records)) {
     return {};
   }
@@ -432,10 +482,8 @@ std::optional<std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int1
     }
 
     uint8_t data_length = data[offset + 1];
-    // Slave writes: high byte first, then low byte
-    // MakeInt16 takes (low_byte, high_byte)
-    uint16_t file_number = MakeInt16(data[offset + 3], data[offset + 2]);
-    uint16_t record_number = MakeInt16(data[offset + 5], data[offset + 4]);
+    uint16_t file_number = static_cast<uint16_t>(DecodeU16(data[offset + 2], data[offset + 3], options_.byte_order));
+    uint16_t record_number = static_cast<uint16_t>(DecodeU16(data[offset + 4], data[offset + 5], options_.byte_order));
     offset += 6;  // Skip header
 
     // Extract record data
@@ -444,8 +492,7 @@ std::optional<std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int1
     record_data.reserve(record_data_length);
 
     for (uint16_t i = 0; i < record_data_length && offset + 1 < end_offset; ++i) {
-      // Modbus RTU uses big-endian: high byte first, then low byte
-      int16_t value = MakeInt16(data[offset + 1], data[offset]);
+      int16_t value = static_cast<int16_t>(DecodeU16(data[offset], data[offset + 1], options_.byte_order));
       record_data.push_back(value);
       offset += 2;
     }
@@ -458,7 +505,7 @@ std::optional<std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int1
 
 bool RtuMaster::WriteFileRecord(uint8_t slave_id,
                                 std::span<const std::tuple<uint16_t, uint16_t, std::vector<int16_t>>> file_records) {
-  RtuRequest request({slave_id, FunctionCode::kWriteFileRecord});
+  RtuRequest request({slave_id, FunctionCode::kWriteFileRecord}, options_.byte_order);
   if (!request.SetWriteFileRecordData(file_records)) {
     return false;
   }

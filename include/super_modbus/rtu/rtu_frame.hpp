@@ -6,6 +6,7 @@
 #include <vector>
 #include "../common/exception_code.hpp"
 #include "../common/function_code.hpp"
+#include "../common/wire_format_options.hpp"
 #include "rtu_request.hpp"
 #include "rtu_response.hpp"
 
@@ -36,9 +37,11 @@ class RtuFrame {
   /**
    * @brief Decode an RTU frame into a request
    * @param frame Complete RTU frame including CRC
+   * @param byte_order Byte order used for 16-bit values in PDU (default: BigEndian)
    * @return Parsed request if frame is valid, empty optional otherwise
    */
-  [[nodiscard]] static std::optional<RtuRequest> DecodeRequest(std::span<const uint8_t> frame);
+  [[nodiscard]] static std::optional<RtuRequest> DecodeRequest(std::span<const uint8_t> frame,
+                                                               ByteOrder byte_order = ByteOrder::BigEndian);
 
   /**
    * @brief Decode an RTU frame into a response

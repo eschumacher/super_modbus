@@ -6,6 +6,7 @@
 #include <vector>
 #include "../common/address_map.hpp"
 #include "../common/address_span.hpp"
+#include "../common/wire_format_options.hpp"
 #include "../transport/byte_reader.hpp"
 #include "../transport/byte_writer.hpp"
 #include "tcp_request.hpp"
@@ -18,8 +19,9 @@ static constexpr uint32_t kDefaultTcpFrameTimeoutMs = 1000;
 
 class TcpSlave {
  public:
-  explicit TcpSlave(uint8_t unit_id)
-      : id_(unit_id) {}
+  explicit TcpSlave(uint8_t unit_id, WireFormatOptions options = {})
+      : id_(unit_id),
+        options_(options) {}
 
   [[nodiscard]] uint8_t GetId() const noexcept { return id_; }
   void SetId(uint8_t unit_id) noexcept { id_ = unit_id; }
@@ -52,6 +54,17 @@ class TcpSlave {
   void AddDiscreteInputs(AddressSpan span);
 
   /**
+   * @brief Add a float range: holding registers [start_register, start_register + register_count) store 32-bit floats.
+   * Each float uses two registers. register_count must be even. Allocates float storage of size register_count/2.
+   */
+  void AddFloatRange(uint16_t start_register, uint16_t register_count);
+
+  /**
+   * @brief Set one float value in the float range (float_index is 0-based within the range).
+   */
+  bool SetFloat(size_t float_index, float value);
+
+  /**
    * @brief Set FIFO queue data at specified address
    * @param fifo_address FIFO address
    * @param queue_data Queue data (vector of register values)
@@ -70,27 +83,24 @@ class TcpSlave {
   [[nodiscard]] static std::optional<std::vector<uint8_t>> ReadFrame(ByteReader &transport,
                                                                      uint32_t timeout_ms = kDefaultTcpFrameTimeoutMs);
 
-  static void ProcessReadRegisters(const AddressMap<int16_t> &address_map, const TcpRequest &request,
-                                   TcpResponse &response);
-  static void ProcessWriteSingleRegister(AddressMap<int16_t> &address_map, const TcpRequest &request,
-                                         TcpResponse &response);
-  static void ProcessReadCoils(const AddressMap<bool> &address_map, const TcpRequest &request, TcpResponse &response);
-  static void ProcessWriteSingleCoil(AddressMap<bool> &address_map, const TcpRequest &request, TcpResponse &response);
-  static void ProcessWriteMultipleRegisters(AddressMap<int16_t> &address_map, const TcpRequest &request,
-                                            TcpResponse &response);
-  static void ProcessWriteMultipleCoils(AddressMap<bool> &address_map, const TcpRequest &request,
-                                        TcpResponse &response);
+  void ProcessReadRegisters(const AddressMap<int16_t> &address_map, const TcpRequest &request, TcpResponse &response,
+                            bool for_holding_registers = false);
+  void ProcessWriteSingleRegister(AddressMap<int16_t> &address_map, const TcpRequest &request, TcpResponse &response);
+  void ProcessReadCoils(const AddressMap<bool> &address_map, const TcpRequest &request, TcpResponse &response);
+  void ProcessWriteSingleCoil(AddressMap<bool> &address_map, const TcpRequest &request, TcpResponse &response);
+  void ProcessWriteMultipleRegisters(AddressMap<int16_t> &address_map, const TcpRequest &request,
+                                     TcpResponse &response);
+  void ProcessWriteMultipleCoils(AddressMap<bool> &address_map, const TcpRequest &request, TcpResponse &response);
   void ProcessReadExceptionStatus(const TcpRequest &request, TcpResponse &response) const;
-  static void ProcessDiagnostics(const TcpRequest &request, TcpResponse &response);
+  void ProcessDiagnostics(const TcpRequest &request, TcpResponse &response);
   void ProcessGetComEventCounter(const TcpRequest &request, TcpResponse &response) const;
   void ProcessGetComEventLog(const TcpRequest &request, TcpResponse &response) const;
   void ProcessReportSlaveID(const TcpRequest &request, TcpResponse &response) const;
   void ProcessReadFileRecord(const TcpRequest &request, TcpResponse &response) const;
   void ProcessWriteFileRecord(const TcpRequest &request, TcpResponse &response);
-  static void ProcessMaskWriteRegister(AddressMap<int16_t> &address_map, const TcpRequest &request,
-                                       TcpResponse &response);
-  static void ProcessReadWriteMultipleRegisters(AddressMap<int16_t> &address_map, const TcpRequest &request,
-                                                TcpResponse &response);
+  void ProcessMaskWriteRegister(AddressMap<int16_t> &address_map, const TcpRequest &request, TcpResponse &response);
+  void ProcessReadWriteMultipleRegisters(AddressMap<int16_t> &address_map, const TcpRequest &request,
+                                         TcpResponse &response);
   void ProcessReadFIFOQueue(const TcpRequest &request, TcpResponse &response) const;
 
   // File Record storage: file_number -> (record_number -> record_data)
@@ -110,6 +120,7 @@ class TcpSlave {
   using ComEventLog = std::vector<ComEventLogEntry>;
 
   uint8_t id_{1};
+  WireFormatOptions options_{};
   uint8_t exception_status_{0};    // For FC 7
   uint16_t com_event_counter_{0};  // For FC 11
   uint16_t message_count_{0};      // For FC 12
@@ -120,6 +131,9 @@ class TcpSlave {
   FileStorage file_storage_{};   // File record storage
   FIFOStorage fifo_storage_{};   // FIFO queue storage
   ComEventLog com_event_log_{};  // Communication event log
+
+  std::optional<std::pair<uint16_t, uint16_t>> float_range_{};  // (start_register, register_count)
+  std::vector<float> float_storage_{};
 };
 
 }  // namespace supermb

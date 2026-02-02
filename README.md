@@ -9,11 +9,12 @@ A modern C++ Modbus library designed for easy integration into any project. The 
 
 - **Transport Abstraction**: Works with any byte I/O mechanism (serial, TCP, memory, etc.) through a simple interface
 - **Modbus RTU Support**: Full RTU frame encoding/decoding with CRC-16 verification
+- **Modbus TCP Support**: Full TCP frame encoding/decoding with MBAP header support
 - **Master/Client Functionality**: Read and write registers from Modbus devices
 - **Slave/Server Functionality**: Process Modbus requests and respond
 - **Modern C++20**: Uses modern C++ features for type safety and performance
 - **Header-Only Components**: Many utilities are header-only for easy integration
-- **Comprehensive Test Suite**: 115+ tests covering all function codes and edge cases
+- **Comprehensive Test Suite**: 280+ tests covering all function codes and edge cases for both RTU and TCP
 
 ## Architecture
 
@@ -22,12 +23,13 @@ The library is designed with a clear separation of concerns:
 ```
 ┌─────────────────────────────────────┐
 │   Application Layer                  │
-│   (RtuMaster, RtuSlave)             │
+│   (RtuMaster, RtuSlave,             │
+│    TcpMaster, TcpSlave)             │
 └──────────────┬──────────────────────┘
                │
 ┌──────────────▼──────────────────────┐
 │   Protocol Layer                    │
-│   (RtuFrame, CRC-16)                │
+│   (RtuFrame, TcpFrame, CRC-16)      │
 └──────────────┬──────────────────────┘
                │
 ┌──────────────▼──────────────────────┐
@@ -38,7 +40,7 @@ The library is designed with a clear separation of concerns:
 
 ## Quick Start
 
-### Using as a Master/Client
+### Using as a Master/Client (RTU)
 
 ```cpp
 #include "super_modbus/rtu/rtu_master.hpp"
@@ -70,7 +72,29 @@ std::vector<int16_t> values = {100, 200, 300};
 bool success = master.WriteMultipleRegisters(1, 0, values);
 ```
 
-### Using as a Slave/Server
+### Using as a Master/Client (TCP)
+
+```cpp
+#include "super_modbus/tcp/tcp_master.hpp"
+#include "super_modbus/transport/memory_transport.hpp"
+
+// Create a transport (implement your own ByteTransport for TCP sockets)
+supermb::MemoryTransport transport;  // For testing; use your own TCP transport in production
+supermb::TcpMaster master(transport);
+
+// Read holding registers from unit ID 1
+auto registers = master.ReadHoldingRegisters(1, 0, 10);
+if (registers.has_value()) {
+    for (int16_t value : *registers) {
+        // Process register value
+    }
+}
+
+// Write a single register
+bool success = master.WriteSingleRegister(1, 0, 42);
+```
+
+### Using as a Slave/Server (RTU)
 
 ```cpp
 #include "super_modbus/rtu/rtu_slave.hpp"
@@ -90,6 +114,31 @@ if (request.has_value()) {
     auto response_frame = supermb::RtuFrame::EncodeResponse(response);
     // Send response_frame to transport
 }
+```
+
+### Using as a Slave/Server (TCP)
+
+```cpp
+#include "super_modbus/tcp/tcp_slave.hpp"
+#include "super_modbus/tcp/tcp_frame.hpp"
+
+// Create a slave device
+supermb::TcpSlave slave(1);  // Unit ID = 1
+
+// Add register ranges
+slave.AddHoldingRegisters({0, 100});  // Addresses 0-99
+slave.AddInputRegisters({0, 50});     // Addresses 0-49
+
+// Process incoming request (from decoded frame)
+auto request = supermb::TcpFrame::DecodeRequest(frame_bytes);
+if (request.has_value()) {
+    auto response = slave.Process(*request);
+    auto response_frame = supermb::TcpFrame::EncodeResponse(response);
+    // Send response_frame to transport
+}
+
+// Or use polling for automatic frame processing
+slave.Poll(transport);  // Checks for incoming frames and processes them
 ```
 
 ### Implementing Custom Transport
@@ -136,7 +185,7 @@ The `MemoryTransport` class is provided for testing purposes only.
 
 ### Fully Implemented Function Codes
 
-All standard Modbus RTU function codes are implemented in both master and slave:
+All standard Modbus function codes are implemented in both RTU and TCP variants for both master and slave:
 
 - **FC 1**: Read Coils
 - **FC 2**: Read Discrete Inputs
@@ -157,7 +206,7 @@ All standard Modbus RTU function codes are implemented in both master and slave:
 - **FC 23**: Read/Write Multiple Registers
 - **FC 24**: Read FIFO Queue
 
-All function codes are fully tested with comprehensive test coverage.
+All function codes are fully tested with comprehensive test coverage for both RTU and TCP implementations.
 
 ## Building
 
@@ -219,23 +268,26 @@ make
 ```
 
 See the `examples/` directory for complete example code demonstrating:
-- Master/client usage
-- Slave/server usage
+- Master/client usage (RTU)
+- Slave/server usage (RTU)
 - Serial port transport implementation template
 - Complete master-slave loopback demonstration
 - Testable slave for use with Modbus Poll
+
+Note: TCP examples follow the same patterns as RTU examples - simply replace `RtuMaster`/`RtuSlave` with `TcpMaster`/`TcpSlave` and use a TCP socket transport instead of serial port transport.
 
 ## Testing
 
 ### Unit Tests
 
-The library includes a comprehensive test suite with 115+ tests covering:
-- All function codes (FC 1-24)
+The library includes a comprehensive test suite with 280+ tests covering:
+- All function codes (FC 1-24) for both RTU and TCP
 - Error handling and exception responses
 - Edge cases and boundary conditions
 - Integration tests for master-slave communication
-- Broadcast support
+- Broadcast support (RTU)
 - File records, FIFO queues, and event logs
+- Frame encoding/decoding for both RTU and TCP
 
 Run tests with:
 ```bash

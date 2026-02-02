@@ -50,7 +50,7 @@ int main() {
   std::cout << "  Set up FIFO queue at address 0 with " << fifo_data.size() << " entries\n";
 
   // Create transport (in production, use your serial port transport)
-  MemoryTransport transport;
+  [[maybe_unused]] MemoryTransport transport;  // Used in real app: slave.Poll(transport) in a loop
 
   std::cout << "\nSlave ready! Waiting for Modbus requests...\n";
   std::cout << "In a real application, this would poll the transport continuously.\n\n";

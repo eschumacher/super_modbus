@@ -26,8 +26,7 @@
 // Global flag for graceful shutdown
 volatile bool g_running = true;
 
-void signal_handler(int signal) {
-  (void)signal;
+void signal_handler([[maybe_unused]] int signal) {
   g_running = false;
 }
 

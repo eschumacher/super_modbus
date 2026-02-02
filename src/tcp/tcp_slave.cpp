@@ -1,19 +1,22 @@
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <chrono>
 #include <limits>
 #include <optional>
+#include <span>
 #include <thread>
 #include <vector>
 #include "common/address_map.hpp"
 #include "common/byte_helpers.hpp"
 #include "common/function_code.hpp"
-#include "rtu/rtu_frame.hpp"
-#include "rtu/rtu_request.hpp"
-#include "rtu/rtu_response.hpp"
-#include "rtu/rtu_slave.hpp"
+#include "tcp/tcp_frame.hpp"
+#include "tcp/tcp_request.hpp"
+#include "tcp/tcp_response.hpp"
+#include "tcp/tcp_slave.hpp"
 #include "common/exception_code.hpp"
 #include "transport/byte_reader.hpp"
+#include "transport/byte_writer.hpp"
 
 namespace supermb {
 
@@ -30,9 +33,8 @@ constexpr uint32_t kDefaultPollTimeoutMs = 100;
 constexpr uint8_t kMaxByteValue = 0xFF;
 constexpr size_t kFileRecordMinHeaderSize =
     7;  // reference_type(1) + file_number(2) + record_number(2) + record_length(2)
-constexpr size_t kFileRecordReadMinSize = 6;  // file_number(2) + record_number(2) + record_length(2)
-constexpr size_t kSlaveIdMaxSize = 256;
-constexpr size_t kFifoQueueMaxSize = 64;
+constexpr size_t kFileRecordReadMinSize =
+    7;  // reference_type(1) + file_number(2) + record_number(2) + record_length(2)
 // Array index offsets for ReadWriteMultipleRegisters
 constexpr size_t kReadWriteReadStartOffset = 0;
 constexpr size_t kReadWriteReadCountOffset = 2;
@@ -43,13 +45,15 @@ constexpr size_t kReadWriteByteCountOffset = 8;
 constexpr size_t kMaskWriteAddressOffset = 0;
 constexpr size_t kMaskWriteAndMaskOffset = 2;
 constexpr size_t kMaskWriteOrMaskOffset = 4;
-// Array index offsets for file record read
-constexpr size_t kFileRecordReadFileNumberOffset = 0;
-constexpr size_t kFileRecordReadRecordNumberOffset = 2;
-constexpr size_t kFileRecordReadRecordLengthOffset = 4;
+// Array index offsets for file record read (per sub-request: reference_type(1) + file_number(2) + record_number(2) +
+// record_length(2))
+constexpr size_t kFileRecordReadReferenceTypeOffset = 0;
+constexpr size_t kFileRecordReadFileNumberOffset = 1;
+constexpr size_t kFileRecordReadRecordNumberOffset = 3;
+constexpr size_t kFileRecordReadRecordLengthOffset = 5;
 }  // namespace
 
-RtuResponse RtuSlave::Process(const RtuRequest &request) {
+TcpResponse TcpSlave::Process(const TcpRequest &request) {
   // Increment communication event counter and add to log
   ++com_event_counter_;
   ++message_count_;
@@ -59,7 +63,7 @@ RtuResponse RtuSlave::Process(const RtuRequest &request) {
   ComEventLogEntry new_entry{static_cast<uint16_t>(request.GetFunctionCode()), com_event_counter_};
   com_event_log_.push_back(new_entry);
 
-  RtuResponse response{request.GetSlaveId(), request.GetFunctionCode()};
+  TcpResponse response{request.GetTransactionId(), request.GetUnitId(), request.GetFunctionCode()};
   switch (request.GetFunctionCode()) {
     case FunctionCode::kReadHR: {
       ProcessReadRegisters(holding_registers_, request, response);
@@ -142,24 +146,24 @@ RtuResponse RtuSlave::Process(const RtuRequest &request) {
   return response;
 }
 
-void RtuSlave::AddHoldingRegisters(AddressSpan span) {
+void TcpSlave::AddHoldingRegisters(AddressSpan span) {
   holding_registers_.AddAddressSpan(span);
 }
 
-void RtuSlave::AddInputRegisters(AddressSpan span) {
+void TcpSlave::AddInputRegisters(AddressSpan span) {
   input_registers_.AddAddressSpan(span);
 }
 
-void RtuSlave::AddCoils(AddressSpan span) {
+void TcpSlave::AddCoils(AddressSpan span) {
   coils_.AddAddressSpan(span);
 }
 
-void RtuSlave::AddDiscreteInputs(AddressSpan span) {
+void TcpSlave::AddDiscreteInputs(AddressSpan span) {
   discrete_inputs_.AddAddressSpan(span);
 }
 
-void RtuSlave::ProcessReadRegisters(const AddressMap<int16_t> &address_map, const RtuRequest &request,
-                                    RtuResponse &response) {
+void TcpSlave::ProcessReadRegisters(const AddressMap<int16_t> &address_map, const TcpRequest &request,
+                                    TcpResponse &response) {
   bool exception_hit = false;
   const auto maybe_address_span = request.GetAddressSpan();
   if (!maybe_address_span.has_value()) {
@@ -191,8 +195,8 @@ void RtuSlave::ProcessReadRegisters(const AddressMap<int16_t> &address_map, cons
   }
 }
 
-void RtuSlave::ProcessWriteSingleRegister(AddressMap<int16_t> &address_map, const RtuRequest &request,
-                                          RtuResponse &response) {
+void TcpSlave::ProcessWriteSingleRegister(AddressMap<int16_t> &address_map, const TcpRequest &request,
+                                          TcpResponse &response) {
   if (request.GetData().size() < 4) {
     response.SetExceptionCode(ExceptionCode::kIllegalFunction);
     return;
@@ -217,7 +221,7 @@ void RtuSlave::ProcessWriteSingleRegister(AddressMap<int16_t> &address_map, cons
   }
 }
 
-void RtuSlave::ProcessReadCoils(const AddressMap<bool> &address_map, const RtuRequest &request, RtuResponse &response) {
+void TcpSlave::ProcessReadCoils(const AddressMap<bool> &address_map, const TcpRequest &request, TcpResponse &response) {
   bool exception_hit = false;
   const auto maybe_address_span = request.GetAddressSpan();
   if (!maybe_address_span.has_value()) {
@@ -263,7 +267,7 @@ void RtuSlave::ProcessReadCoils(const AddressMap<bool> &address_map, const RtuRe
   }
 }
 
-void RtuSlave::ProcessWriteSingleCoil(AddressMap<bool> &address_map, const RtuRequest &request, RtuResponse &response) {
+void TcpSlave::ProcessWriteSingleCoil(AddressMap<bool> &address_map, const TcpRequest &request, TcpResponse &response) {
   if (request.GetData().size() < 4) {
     response.SetExceptionCode(ExceptionCode::kIllegalFunction);
     return;
@@ -289,8 +293,8 @@ void RtuSlave::ProcessWriteSingleCoil(AddressMap<bool> &address_map, const RtuRe
   }
 }
 
-void RtuSlave::ProcessWriteMultipleRegisters(AddressMap<int16_t> &address_map, const RtuRequest &request,
-                                             RtuResponse &response) {
+void TcpSlave::ProcessWriteMultipleRegisters(AddressMap<int16_t> &address_map, const TcpRequest &request,
+                                             TcpResponse &response) {
   const auto &data = request.GetData();
 
   // Data format: address (2), count (2), byte_count (1), values (count * 2)
@@ -338,8 +342,8 @@ void RtuSlave::ProcessWriteMultipleRegisters(AddressMap<int16_t> &address_map, c
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessWriteMultipleCoils(AddressMap<bool> &address_map, const RtuRequest &request,
-                                         RtuResponse &response) {
+void TcpSlave::ProcessWriteMultipleCoils(AddressMap<bool> &address_map, const TcpRequest &request,
+                                         TcpResponse &response) {
   const auto &data = request.GetData();
 
   // Data format: address (2), count (2), byte_count (1), coil values (packed)
@@ -388,53 +392,30 @@ void RtuSlave::ProcessWriteMultipleCoils(AddressMap<bool> &address_map, const Rt
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-bool RtuSlave::ProcessIncomingFrame(ByteTransport &transport, uint32_t timeout_ms) {
+bool TcpSlave::ProcessIncomingFrame(ByteTransport &transport, uint32_t timeout_ms) {
   auto frame = ReadFrame(transport, timeout_ms);
   if (!frame.has_value()) {
     return false;
   }
 
   // Decode the request frame
-  auto request = RtuFrame::DecodeRequest(std::span<const uint8_t>(frame->data(), frame->size()));
+  auto request = TcpFrame::DecodeRequest(std::span<const uint8_t>(frame->data(), frame->size()));
   if (!request.has_value()) {
     return false;  // Invalid frame
   }
 
   // Check if this request is for this slave
   // Accept broadcast (slave ID 0) for write operations only
-  uint8_t request_slave_id = request->GetSlaveId();
-  bool is_broadcast = (request_slave_id == 0);
-  bool is_broadcastable_write = IsBroadcastableWrite(request->GetFunctionCode());
-
-  if (is_broadcast) {
-    // Broadcast messages are only valid for write operations
-    if (!is_broadcastable_write) {
-      return false;  // Invalid broadcast (read operations cannot be broadcast)
-    }
-    // Process broadcast write, but don't send response
-  } else if (request_slave_id != id_) {
+  uint8_t request_unit_id = request->GetUnitId();
+  if (request_unit_id != id_) {
     return false;  // Not for this slave
   }
 
-  // Increment communication event counter and add to log
-  ++com_event_counter_;
-  ++message_count_;
-  if (com_event_log_.size() >= kComEventLogMaxSize) {
-    com_event_log_.erase(com_event_log_.begin());  // Remove oldest entry
-  }
-  ComEventLogEntry new_entry{static_cast<uint16_t>(request->GetFunctionCode()), com_event_counter_};
-  com_event_log_.push_back(new_entry);
+  // Process the request (Process increments com_event_counter_, message_count_, and adds to com_event_log_)
+  TcpResponse response = Process(*request);
 
-  // Process the request
-  RtuResponse response = Process(*request);
-
-  // Broadcast messages don't receive responses (Modbus spec)
-  if (is_broadcast) {
-    return true;  // Successfully processed broadcast, but no response sent
-  }
-
-  // Encode and send response for non-broadcast messages
-  std::vector<uint8_t> response_frame = RtuFrame::EncodeResponse(response);
+  // Encode and send response
+  std::vector<uint8_t> response_frame = TcpFrame::EncodeResponse(response);
   int bytes_written = transport.Write(std::span<const uint8_t>(response_frame.data(), response_frame.size()));
   if (bytes_written != static_cast<int>(response_frame.size())) {
     return false;
@@ -444,7 +425,7 @@ bool RtuSlave::ProcessIncomingFrame(ByteTransport &transport, uint32_t timeout_m
   return true;
 }
 
-bool RtuSlave::Poll(ByteTransport &transport) {
+bool TcpSlave::Poll(ByteTransport &transport) {
   // Check if data is available
   if (!transport.HasData()) {
     return false;
@@ -454,14 +435,14 @@ bool RtuSlave::Poll(ByteTransport &transport) {
   return ProcessIncomingFrame(transport, kDefaultPollTimeoutMs);
 }
 
-void RtuSlave::ProcessReadExceptionStatus(const RtuRequest & /*request*/, RtuResponse &response) const {
+void TcpSlave::ProcessReadExceptionStatus(const TcpRequest & /*request*/, TcpResponse &response) const {
   // FC 7: Read Exception Status - Returns 1 byte exception status
   // For simplicity, we'll return a configurable exception status byte
   response.EmplaceBack(exception_status_);
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessDiagnostics(const RtuRequest &request, RtuResponse &response) {
+void TcpSlave::ProcessDiagnostics(const TcpRequest &request, TcpResponse &response) {
   // FC 8: Diagnostics - Sub-function code based
   // Returns the data sent in the request (echo)
   const auto &data = request.GetData();
@@ -477,36 +458,41 @@ void RtuSlave::ProcessDiagnostics(const RtuRequest &request, RtuResponse &respon
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessGetComEventCounter(const RtuRequest & /*request*/, RtuResponse &response) const {
-  // FC 11: Get Com Event Counter - Returns 2 bytes: status (1) + event count (2)
-  response.EmplaceBack(0x00);  // Status: 0x00 = no error, 0xFF = error
-  response.EmplaceBack(GetLowByte(com_event_counter_));
+void TcpSlave::ProcessGetComEventCounter(const TcpRequest & /*request*/, TcpResponse &response) const {
+  // FC 11: Get Com Event Counter - Returns status (2 bytes) + event count (2 bytes)
+  // Per Modbus spec: status is a 2-byte word (0x0000 = ready, 0xFFFF = busy)
+  // Modbus uses big-endian: high byte first, then low byte
+  response.EmplaceBack(0x00);  // Status high byte
+  response.EmplaceBack(0x00);  // Status low byte (0x0000 = ready)
   response.EmplaceBack(GetHighByte(com_event_counter_));
+  response.EmplaceBack(GetLowByte(com_event_counter_));
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessGetComEventLog(const RtuRequest & /*request*/, RtuResponse &response) const {
+void TcpSlave::ProcessGetComEventLog(const TcpRequest & /*request*/, TcpResponse &response) const {
   // FC 12: Get Com Event Log - Returns status, event count, message count, and events
+  // Modbus uses big-endian: high byte first, then low byte
   response.EmplaceBack(0x00);  // Status (0x00 = no error, kMaxByteValue = error)
-  response.EmplaceBack(GetLowByte(com_event_counter_));
   response.EmplaceBack(GetHighByte(com_event_counter_));
-  response.EmplaceBack(GetLowByte(message_count_));
+  response.EmplaceBack(GetLowByte(com_event_counter_));
   response.EmplaceBack(GetHighByte(message_count_));
+  response.EmplaceBack(GetLowByte(message_count_));
 
   // Add event log entries (up to kComEventLogMaxSize events max per Modbus spec)
+  // Modbus uses big-endian: high byte first, then low byte
   size_t event_count = std::min(com_event_log_.size(), size_t{kComEventLogMaxSize});
   for (size_t i = 0; i < event_count; ++i) {
     const auto &entry = com_event_log_[i];
-    response.EmplaceBack(GetLowByte(entry.event_id));
     response.EmplaceBack(GetHighByte(entry.event_id));
-    response.EmplaceBack(GetLowByte(entry.event_count));
+    response.EmplaceBack(GetLowByte(entry.event_id));
     response.EmplaceBack(GetHighByte(entry.event_count));
+    response.EmplaceBack(GetLowByte(entry.event_count));
   }
 
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessReportSlaveID(const RtuRequest & /*request*/, RtuResponse &response) const {
+void TcpSlave::ProcessReportSlaveID(const TcpRequest & /*request*/, TcpResponse &response) const {
   // FC 17: Report Slave ID - Returns slave ID, run indicator, and additional data
   response.EmplaceBack(id_);            // Slave ID
   response.EmplaceBack(kMaxByteValue);  // Run indicator (kMaxByteValue = run, 0x00 = stop)
@@ -514,9 +500,9 @@ void RtuSlave::ProcessReportSlaveID(const RtuRequest & /*request*/, RtuResponse 
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessReadFileRecord(const RtuRequest &request, RtuResponse &response) const {
+void TcpSlave::ProcessReadFileRecord(const TcpRequest &request, TcpResponse &response) const {
   // FC 20: Read File Record - Read records from files
-  // Request format: byte_count (1) + [file_number (2) + record_number (2) + record_length (2)] * N
+  // Request format: byte_count (1) + [reference_type (1) + file_number (2) + record_number (2) + record_length (2)] * N
   const auto &data = request.GetData();
   if (data.empty()) {
     response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
@@ -540,7 +526,11 @@ void RtuSlave::ProcessReadFileRecord(const RtuRequest &request, RtuResponse &res
       return;
     }
 
-    // File record read format: file_number(2) + record_number(2) + record_length(2) = 6 bytes
+    // Per Modbus spec: reference_type (1) + file_number (2) + record_number (2) + record_length (2) = 7 bytes
+    if (data[data_offset + kFileRecordReadReferenceTypeOffset] != kFileRecordReferenceType) {
+      response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
+      return;
+    }
     uint16_t file_number = MakeInt16(data[data_offset + kFileRecordReadFileNumberOffset + 1],
                                      data[data_offset + kFileRecordReadFileNumberOffset]);
     uint16_t record_number = MakeInt16(data[data_offset + kFileRecordReadRecordNumberOffset + 1],
@@ -587,7 +577,7 @@ void RtuSlave::ProcessReadFileRecord(const RtuRequest &request, RtuResponse &res
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessWriteFileRecord(const RtuRequest &request, RtuResponse &response) {
+void TcpSlave::ProcessWriteFileRecord(const TcpRequest &request, TcpResponse &response) {
   // FC 21: Write File Record - Write records to files
   // Request format: byte_count (1) + [reference_type (1) + file_number (2) + record_number (2) + record_length (2) +
   // record_data (N*2)] * N
@@ -650,8 +640,8 @@ void RtuSlave::ProcessWriteFileRecord(const RtuRequest &request, RtuResponse &re
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessMaskWriteRegister(AddressMap<int16_t> &address_map, const RtuRequest &request,
-                                        RtuResponse &response) {
+void TcpSlave::ProcessMaskWriteRegister(AddressMap<int16_t> &address_map, const TcpRequest &request,
+                                        TcpResponse &response) {
   // FC 22: Mask Write Register - Write with AND mask and OR mask
   const auto &data = request.GetData();
   if (data.size() < kMinMaskWriteDataSize) {
@@ -684,8 +674,8 @@ void RtuSlave::ProcessMaskWriteRegister(AddressMap<int16_t> &address_map, const 
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessReadWriteMultipleRegisters(AddressMap<int16_t> &address_map, const RtuRequest &request,
-                                                 RtuResponse &response) {
+void TcpSlave::ProcessReadWriteMultipleRegisters(AddressMap<int16_t> &address_map, const TcpRequest &request,
+                                                 TcpResponse &response) {
   // FC 23: Read/Write Multiple Registers - Read from one area, write to another
   const auto &data = request.GetData();
   if (data.size() < kMinReadWriteDataSize) {
@@ -726,6 +716,9 @@ void RtuSlave::ProcessReadWriteMultipleRegisters(AddressMap<int16_t> &address_ma
   }
 
   // Then, perform the read operation
+  auto byte_count = static_cast<uint8_t>(read_count * 2);
+  response.EmplaceBack(byte_count);  // FC23 response format: byte_count prefix, then register data
+
   for (int i = 0; i < read_count; ++i) {
     auto reg_value = address_map[read_start + i];
     if (!reg_value.has_value()) {
@@ -740,7 +733,7 @@ void RtuSlave::ProcessReadWriteMultipleRegisters(AddressMap<int16_t> &address_ma
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-void RtuSlave::ProcessReadFIFOQueue(const RtuRequest &request, RtuResponse &response) const {
+void TcpSlave::ProcessReadFIFOQueue(const TcpRequest &request, TcpResponse &response) const {
   // FC 24: Read FIFO Queue - Read from FIFO queue at specified address
   const auto &data = request.GetData();
   if (data.size() < 2) {
@@ -750,7 +743,6 @@ void RtuSlave::ProcessReadFIFOQueue(const RtuRequest &request, RtuResponse &resp
 
   uint16_t fifo_address = MakeInt16(data[1], data[0]);
 
-  // Check if FIFO queue exists
   // Check if FIFO queue exists (empty queue is valid per Modbus spec)
   auto fifo_it = fifo_storage_.find(fifo_address);
   if (fifo_it == fifo_storage_.end()) {
@@ -760,7 +752,8 @@ void RtuSlave::ProcessReadFIFOQueue(const RtuRequest &request, RtuResponse &resp
 
   const FIFOQueue &fifo_queue = fifo_it->second;
   auto fifo_count = static_cast<uint16_t>(fifo_queue.size());
-  uint16_t byte_count = fifo_count * 2;  // Each register is 2 bytes
+  // Per Modbus spec: byte_count includes the 2-byte FIFO count field + data
+  uint16_t byte_count = 2 + (fifo_count * 2);  // 2 for fifo_count + data bytes
 
   // FIFO response: byte count (2), FIFO count (2), FIFO data (fifo_count * 2)
   // Modbus RTU uses big-endian: high byte first, then low byte
@@ -779,15 +772,14 @@ void RtuSlave::ProcessReadFIFOQueue(const RtuRequest &request, RtuResponse &resp
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
-std::optional<std::vector<uint8_t>> RtuSlave::ReadFrame(ByteReader &transport, uint32_t timeout_ms) {
+std::optional<std::vector<uint8_t>> TcpSlave::ReadFrame(ByteReader &transport, uint32_t timeout_ms) {
   std::vector<uint8_t> buffer;
-  buffer.reserve(kSlaveIdMaxSize);  // Reserve space for typical frame
+  buffer.reserve(256);  // Reserve space for typical frame
 
   auto start_time = std::chrono::steady_clock::now();
-  bool frame_started = false;
 
-  while (true) {
-    // Check timeout
+  // Read MBAP header first (7 bytes)
+  while (buffer.size() < 7) {
     if (timeout_ms > 0) {
       auto elapsed = std::chrono::steady_clock::now() - start_time;
       auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
@@ -796,33 +788,58 @@ std::optional<std::vector<uint8_t>> RtuSlave::ReadFrame(ByteReader &transport, u
       }
     }
 
-    // Try to read bytes
-    std::array<uint8_t, kFifoQueueMaxSize> temp_buffer{};
-    std::span<uint8_t> read_span(temp_buffer.data(), temp_buffer.size());
-    int bytes_read = transport.Read(read_span);
-
-    if (bytes_read > 0) {
-      buffer.insert(buffer.end(), temp_buffer.begin(), temp_buffer.begin() + bytes_read);
-      frame_started = true;
-
-      // Check if we have a complete frame (slave reads requests)
-      std::span<const uint8_t> frame_span(buffer.data(), buffer.size());
-      if (RtuFrame::IsRequestFrameComplete(frame_span)) {
-        return buffer;
-      }
-    } else if (frame_started && bytes_read == 0) {
-      // Frame started but no more data available - might be complete (slave reads requests)
-      std::span<const uint8_t> frame_span(buffer.data(), buffer.size());
-      if (RtuFrame::IsRequestFrameComplete(frame_span)) {
-        return buffer;
-      }
-      // Wait a bit for more data (RTU frames should arrive quickly)
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    } else if (!frame_started) {
-      // No data yet, wait a bit
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    if (!transport.HasData()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      continue;
     }
+
+    size_t current_size = buffer.size();
+    size_t needed = 7 - current_size;
+    buffer.resize(7);
+    std::span<uint8_t> read_span(buffer.data() + current_size, needed);
+    int bytes_read = transport.Read(read_span);
+    if (bytes_read <= 0) {
+      buffer.resize(current_size);  // Restore original size on error
+      return {};
+    }
+    buffer.resize(current_size + static_cast<size_t>(bytes_read));
   }
+
+  // Extract length from MBAP header (bytes 4-5, big-endian)
+  uint16_t length = static_cast<uint16_t>((static_cast<uint16_t>(buffer[4]) << 8) | static_cast<uint16_t>(buffer[5]));
+
+  // Read remaining bytes
+  // MBAP header = Transaction ID(2) + Protocol ID(2) + Length(2) + Unit ID(1) = 7 bytes
+  // Length field value = Unit ID(1) + PDU size
+  // Total frame size = 7 + (length - 1) = 6 + length
+  size_t total_size = 6 + length;
+  while (buffer.size() < total_size) {
+    if (timeout_ms > 0) {
+      auto elapsed = std::chrono::steady_clock::now() - start_time;
+      auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+      if (elapsed_ms >= static_cast<int64_t>(timeout_ms)) {
+        return {};
+      }
+    }
+
+    if (!transport.HasData()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      continue;
+    }
+
+    size_t current_size = buffer.size();
+    size_t needed = total_size - current_size;
+    buffer.resize(total_size);
+    std::span<uint8_t> read_span(buffer.data() + current_size, needed);
+    int bytes_read = transport.Read(read_span);
+    if (bytes_read <= 0) {
+      buffer.resize(current_size);  // Restore original size on error
+      return {};
+    }
+    buffer.resize(current_size + static_cast<size_t>(bytes_read));
+  }
+
+  return buffer;
 }
 
 }  // namespace supermb

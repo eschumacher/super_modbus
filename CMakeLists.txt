@@ -20,6 +20,10 @@ add_library(${PROJECT_NAME}-lib
     src/rtu/rtu_slave.cpp
     src/rtu/rtu_frame.cpp
     src/rtu/rtu_master.cpp
+    src/tcp/tcp_request.cpp
+    src/tcp/tcp_slave.cpp
+    src/tcp/tcp_frame.cpp
+    src/tcp/tcp_master.cpp
 )
 
 # target_link_libraries(${PROJECT_NAME}-lib PRIVATE

@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include "byte_reader.hpp"
 
 namespace supermb {
 

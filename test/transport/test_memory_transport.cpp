@@ -117,9 +117,10 @@ TEST(MemoryTransport, WriteData) {
   EXPECT_EQ(bytes_written, 3);
 
   auto written = transport.GetWrittenData();
-  EXPECT_EQ(written.size(), 3);
+  ASSERT_EQ(written.size(), 3);  // ASSERT to prevent OOB access if wrong
   EXPECT_EQ(written[0], 0x01);
   EXPECT_EQ(written[1], 0x02);
+  // cppcheck-suppress containerOutOfBounds
   EXPECT_EQ(written[2], 0x03);
 }
 
@@ -133,11 +134,14 @@ TEST(MemoryTransport, WriteMultipleTimes) {
   (void)transport.Write(data2);
 
   auto written = transport.GetWrittenData();
-  EXPECT_EQ(written.size(), 5);
+  ASSERT_EQ(written.size(), 5);  // ASSERT to prevent OOB access if wrong
   EXPECT_EQ(written[0], 0x01);
   EXPECT_EQ(written[1], 0x02);
+  // cppcheck-suppress containerOutOfBounds
   EXPECT_EQ(written[2], 0x03);
+  // cppcheck-suppress containerOutOfBounds
   EXPECT_EQ(written[3], 0x04);
+  // cppcheck-suppress containerOutOfBounds
   EXPECT_EQ(written[4], 0x05);
 }
 
@@ -248,9 +252,10 @@ TEST(MemoryTransport, ReadWriteIndependence) {
   (void)transport.Read(buffer);
 
   auto written = transport.GetWrittenData();
-  EXPECT_EQ(written.size(), 3);
+  ASSERT_EQ(written.size(), 3);  // ASSERT to prevent OOB access if wrong
   EXPECT_EQ(written[0], 0xAA);
   EXPECT_EQ(written[1], 0xBB);
+  // cppcheck-suppress containerOutOfBounds
   EXPECT_EQ(written[2], 0xCC);
 }
 

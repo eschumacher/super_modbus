@@ -37,8 +37,7 @@ using supermb::SerialTransport;
 volatile bool g_running = true;
 volatile bool g_slave_running = false;
 
-void signal_handler(int signal) {
-  (void)signal;
+void signal_handler([[maybe_unused]] int signal) {
   g_running = false;
 }
 

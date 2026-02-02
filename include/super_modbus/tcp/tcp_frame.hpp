@@ -107,11 +107,6 @@ class TcpFrame {
   static void WriteProtocolId(std::vector<uint8_t> &frame);
 
   /**
-   * @brief Write length to MBAP header (big-endian)
-   */
-  static void WriteLength(std::vector<uint8_t> &frame, uint16_t length);
-
-  /**
    * @brief Write unit ID to MBAP header
    */
   static void WriteUnitId(std::vector<uint8_t> &frame, uint8_t unit_id);

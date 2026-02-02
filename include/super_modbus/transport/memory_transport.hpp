@@ -18,7 +18,8 @@ namespace supermb {
  */
 class MemoryTransport : public ByteTransport {
  public:
-  explicit MemoryTransport(size_t initial_capacity = 256)
+  static constexpr size_t kDefaultInitialCapacity = 256;
+  explicit MemoryTransport(size_t initial_capacity = kDefaultInitialCapacity)
       : read_buffer_(initial_capacity) {}
 
   // ByteReader interface
@@ -57,9 +58,7 @@ class MemoryTransport : public ByteTransport {
   /**
    * @brief Get the data that was written via Write()
    */
-  [[nodiscard]] std::span<const uint8_t> GetWrittenData() const {
-    return std::span<const uint8_t>(write_buffer_.data(), write_buffer_.size());
-  }
+  [[nodiscard]] std::span<const uint8_t> GetWrittenData() const { return {write_buffer_.data(), write_buffer_.size()}; }
 
   /**
    * @brief Clear the write buffer

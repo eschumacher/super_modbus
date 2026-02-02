@@ -279,6 +279,24 @@ TEST(TCPRequestEdgeCases, ValidReadWriteMultipleRegisters) {
   EXPECT_EQ(data.size(), 13);
 }
 
+TEST(TCPRequestEdgeCases, ValidDiagnostics) {
+  TcpRequest request{{0, 1, FunctionCode::kDiagnostics}};
+  std::vector<uint8_t> data{0x00, 0x01, 0x12, 0x34};
+
+  bool result = request.SetDiagnosticsData(0x0001, data);
+  EXPECT_TRUE(result);
+  EXPECT_GE(request.GetData().size(), 2);
+}
+
+TEST(TCPRequestEdgeCases, ValidMaskWriteRegister) {
+  TcpRequest request{{0, 1, FunctionCode::kMaskWriteReg}};
+  bool result = request.SetMaskWriteRegisterData(50, 0xFF00, 0x00FF);
+  EXPECT_TRUE(result);
+
+  auto data = request.GetData();
+  EXPECT_EQ(data.size(), 6);  // address(2) + and_mask(2) + or_mask(2)
+}
+
 TEST(TCPRequestEdgeCases, ValidReadFIFOQueue) {
   TcpRequest request{{0, 1, FunctionCode::kReadFIFOQueue}};
   bool result = request.SetReadFIFOQueueData(0x1234);

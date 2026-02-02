@@ -34,7 +34,6 @@ constexpr uint8_t kMaxByteValue = 0xFF;
 constexpr size_t kFileRecordMinHeaderSize =
     7;  // reference_type(1) + file_number(2) + record_number(2) + record_length(2)
 constexpr size_t kFileRecordReadMinSize = 6;  // file_number(2) + record_number(2) + record_length(2)
-constexpr size_t kFifoQueueMaxSize = 64;
 // Array index offsets for ReadWriteMultipleRegisters
 constexpr size_t kReadWriteReadStartOffset = 0;
 constexpr size_t kReadWriteReadCountOffset = 2;
@@ -409,16 +408,7 @@ bool TcpSlave::ProcessIncomingFrame(ByteTransport &transport, uint32_t timeout_m
     return false;  // Not for this slave
   }
 
-  // Increment communication event counter and add to log
-  ++com_event_counter_;
-  ++message_count_;
-  if (com_event_log_.size() >= kComEventLogMaxSize) {
-    com_event_log_.erase(com_event_log_.begin());  // Remove oldest entry
-  }
-  ComEventLogEntry new_entry{static_cast<uint16_t>(request->GetFunctionCode()), com_event_counter_};
-  com_event_log_.push_back(new_entry);
-
-  // Process the request
+  // Process the request (Process increments com_event_counter_, message_count_, and adds to com_event_log_)
   TcpResponse response = Process(*request);
 
   // Encode and send response
@@ -717,6 +707,9 @@ void TcpSlave::ProcessReadWriteMultipleRegisters(AddressMap<int16_t> &address_ma
   }
 
   // Then, perform the read operation
+  auto byte_count = static_cast<uint8_t>(read_count * 2);
+  response.EmplaceBack(byte_count);  // FC23 response format: byte_count prefix, then register data
+
   for (int i = 0; i < read_count; ++i) {
     auto reg_value = address_map[read_start + i];
     if (!reg_value.has_value()) {

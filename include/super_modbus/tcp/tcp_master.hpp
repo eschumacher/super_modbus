@@ -43,7 +43,7 @@ class TcpMaster {
    */
   explicit TcpMaster(ByteTransport &transport)
       : transport_(transport),
-        next_transaction_id_(1) {}
+  {}
 
   /**
    * @brief Read holding registers from a unit
@@ -240,7 +240,7 @@ class TcpMaster {
   [[nodiscard]] std::optional<std::vector<uint8_t>> ReadFrame(uint32_t timeout_ms = 1000);
 
   ByteTransport &transport_;
-  uint16_t next_transaction_id_;
+  uint16_t next_transaction_id_{};
 };
 
 }  // namespace supermb

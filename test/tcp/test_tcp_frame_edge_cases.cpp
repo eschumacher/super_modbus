@@ -351,3 +351,62 @@ TEST(TCPFrameEdgeCases, UnitIdMax) {
   ASSERT_TRUE(decoded.has_value());
   EXPECT_EQ(decoded->GetUnitId(), kUnitId);
 }
+
+TEST(TCPFrameEdgeCases, DecodeRequestLengthLessThanOne) {
+  // Frame with length field = 0 (invalid - must have at least Unit ID)
+  // Need 8 bytes to pass min frame size check, then length=0 fails
+  std::vector<uint8_t> frame;
+  frame.push_back(0x00);
+  frame.push_back(0x01);  // Transaction ID
+  frame.push_back(0x00);
+  frame.push_back(0x00);  // Protocol ID
+  frame.push_back(0x00);
+  frame.push_back(0x00);  // Length = 0 (invalid)
+  frame.push_back(0x01);  // Unit ID (padding)
+  frame.push_back(0x07);  // Function code (padding)
+
+  auto decoded = TcpFrame::DecodeRequest(frame);
+  EXPECT_FALSE(decoded.has_value());  // length < 1 is invalid
+}
+
+TEST(TCPFrameEdgeCases, EncodeResponseExceptionPath) {
+  static constexpr uint16_t kTransactionId{100};
+  static constexpr uint8_t kUnitId{1};
+
+  TcpResponse response{kTransactionId, kUnitId, FunctionCode::kReadHR};
+  response.SetExceptionCode(ExceptionCode::kIllegalDataAddress);
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  ASSERT_GE(frame.size(), 9);  // MBAP(7) + exception FC(1) + exception code(1)
+  EXPECT_EQ(frame[7], 0x83);   // Function code with exception mask (0x03 | 0x80)
+  EXPECT_EQ(frame[8], static_cast<uint8_t>(ExceptionCode::kIllegalDataAddress));
+
+  auto decoded = TcpFrame::DecodeResponse(frame);
+  ASSERT_TRUE(decoded.has_value());
+  EXPECT_EQ(decoded->GetExceptionCode(), ExceptionCode::kIllegalDataAddress);
+}
+
+TEST(TCPFrameEdgeCases, GetMinFrameSizeAllFunctionCodes) {
+  EXPECT_EQ(TcpFrame::GetMinFrameSize(FunctionCode::kReadCoils), 12);
+  EXPECT_EQ(TcpFrame::GetMinFrameSize(FunctionCode::kReadDI), 12);
+  EXPECT_EQ(TcpFrame::GetMinFrameSize(FunctionCode::kReadIR), 12);
+  EXPECT_EQ(TcpFrame::GetMinFrameSize(FunctionCode::kDiagnostics), 8);
+  EXPECT_EQ(TcpFrame::GetMinFrameSize(FunctionCode::kGetComEventCounter), 8);
+  EXPECT_EQ(TcpFrame::GetMinFrameSize(FunctionCode::kReportSlaveID), 8);
+}
+
+TEST(TCPFrameEdgeCases, IsResponseFrameComplete) {
+  std::vector<uint8_t> frame;
+  frame.push_back(0x00);
+  frame.push_back(0x01);
+  frame.push_back(0x00);
+  frame.push_back(0x00);
+  frame.push_back(0x00);
+  frame.push_back(0x02);
+  frame.push_back(0x01);
+  frame.push_back(0x07);
+
+  EXPECT_TRUE(TcpFrame::IsResponseFrameComplete(frame));
+  frame.pop_back();
+  EXPECT_FALSE(TcpFrame::IsResponseFrameComplete(frame));
+}

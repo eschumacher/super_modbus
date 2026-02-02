@@ -47,9 +47,9 @@ class FailingTransport : public supermb::ByteTransport {
     return transport_.Flush();
   }
 
-  bool HasData() const override { return transport_.HasData(); }
+  [[nodiscard]] bool HasData() const override { return transport_.HasData(); }
 
-  size_t AvailableBytes() const override { return transport_.AvailableBytes(); }
+  [[nodiscard]] size_t AvailableBytes() const override { return transport_.AvailableBytes(); }
 
   void SetReadData(std::span<const uint8_t> data) { transport_.SetReadData(data); }
   void ResetReadPosition() { transport_.ResetReadPosition(); }
@@ -681,7 +681,6 @@ TEST(TCPMasterCoverage, WriteFileRecord_ExceptionResponse) {
 
 // Test ReceiveResponse with decode failure
 TEST(TCPMasterCoverage, ReceiveResponse_DecodeFailure) {
-  static constexpr uint8_t kUnitId{1};
   static constexpr uint16_t kTransactionId{123};
   MemoryTransport transport;
   TcpMaster master{transport};
@@ -1031,5 +1030,302 @@ TEST(TCPMasterCoverage, ReceiveResponse_TransactionIdMismatchAfterDecode) {
   transport.ResetReadPosition();
 
   auto result = master.ReceiveResponse(1, 100);  // Expecting transaction ID 1
+  EXPECT_FALSE(result.has_value());
+}
+
+// Success path: Diagnostics
+TEST(TCPMasterCoverage, Diagnostics_Success) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kDiagnostics};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  response.EmplaceBack(0x12);
+  response.EmplaceBack(0x34);
+  response.EmplaceBack(0x56);
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  std::vector<uint8_t> req_data{0xAA, 0xBB};
+  auto result = master.Diagnostics(kUnitId, 0x0001, req_data);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->size(), 3);
+  EXPECT_EQ((*result)[0], 0x12);
+  EXPECT_EQ((*result)[1], 0x34);
+  EXPECT_EQ((*result)[2], 0x56);
+}
+
+// Success path: GetComEventLog
+TEST(TCPMasterCoverage, GetComEventLog_Success) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kGetComEventLog};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  response.EmplaceBack(0x02);  // Status
+  response.EmplaceBack(0x00);  // Event count high
+  response.EmplaceBack(0x05);  // Event count low
+  response.EmplaceBack(0x00);  // Message count high
+  response.EmplaceBack(0x0A);  // Message count low
+  response.EmplaceBack(0x00);  // Event ID high
+  response.EmplaceBack(0x01);  // Event ID low
+  response.EmplaceBack(0x00);  // Event count high
+  response.EmplaceBack(0x01);  // Event count low
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  auto result = master.GetComEventLog(kUnitId);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_GE(result->size(), 2);
+}
+
+// Success path: ReportSlaveID
+TEST(TCPMasterCoverage, ReportSlaveID_Success) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kReportSlaveID};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  response.EmplaceBack(0x01);  // Slave ID byte count
+  response.EmplaceBack(0x42);  // Slave ID
+  response.EmplaceBack(0x01);  // Run indicator
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  auto result = master.ReportSlaveID(kUnitId);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->size(), 3);
+}
+
+// Success path: ReadFIFOQueue
+TEST(TCPMasterCoverage, ReadFIFOQueue_Success) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kReadFIFOQueue};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  // Modbus FC24 format: byte_count first, then fifo_count (big-endian)
+  response.EmplaceBack(0x00);  // byte_count high
+  response.EmplaceBack(0x04);  // byte_count low (4)
+  response.EmplaceBack(0x00);  // fifo_count high
+  response.EmplaceBack(0x02);  // fifo_count low (2 entries)
+  response.EmplaceBack(0x00);  // value 0 high
+  response.EmplaceBack(0x11);  // value 0 low (17)
+  response.EmplaceBack(0x00);  // value 1 high
+  response.EmplaceBack(0x22);  // value 1 low (34)
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  auto result = master.ReadFIFOQueue(kUnitId, 0);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->size(), 2);
+  EXPECT_EQ((*result)[0], 17);
+  EXPECT_EQ((*result)[1], 34);
+}
+
+// Success path: ReadWriteMultipleRegisters
+TEST(TCPMasterCoverage, ReadWriteMultipleRegisters_Success) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kReadWriteMultRegs};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  response.EmplaceBack(0x04);  // Byte count (2 registers)
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x0A);  // Register 0 = 10
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x14);  // Register 1 = 20
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  std::array<int16_t, 2> write_values{100, 200};
+  auto result = master.ReadWriteMultipleRegisters(kUnitId, 0, 2, 0, std::span<const int16_t>(write_values));
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->size(), 2);
+  EXPECT_EQ((*result)[0], 10);
+  EXPECT_EQ((*result)[1], 20);
+}
+
+// Success path: ReadFileRecord with single record
+TEST(TCPMasterCoverage, ReadFileRecord_Success) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kReadFileRecord};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  response.EmplaceBack(10);    // Response length = 10 (ref+len+file+rec+2regs)
+  response.EmplaceBack(0x06);  // Reference type
+  response.EmplaceBack(0x08);  // Data length (4 + 2*2)
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x01);  // File 1
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x00);  // Record 0
+  response.EmplaceBack(0x00);  // Register 0 high
+  response.EmplaceBack(0x0A);  // Register 0 low (10)
+  response.EmplaceBack(0x00);  // Register 1 high
+  response.EmplaceBack(0x14);  // Register 1 low (20)
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  std::vector<std::tuple<uint16_t, uint16_t, uint16_t>> records;
+  records.emplace_back(1, 0, 2);
+  auto result = master.ReadFileRecord(kUnitId, records);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->size(), 1);
+  auto it = result->find({1, 0});
+  ASSERT_NE(it, result->end());
+  EXPECT_EQ(it->second.size(), 2);
+  EXPECT_EQ(it->second[0], 10);
+  EXPECT_EQ(it->second[1], 20);
+}
+
+// Success path: ReadFileRecord with multiple records
+TEST(TCPMasterCoverage, ReadFileRecord_MultipleRecords) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kReadFileRecord};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  response.EmplaceBack(20);    // Response length = 20 (2 records * 10 bytes)
+  response.EmplaceBack(0x06);  // Reference type
+  response.EmplaceBack(0x08);  // Data length (4 + 2*2)
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x01);  // File 1
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x00);  // Record 0
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x0A);  // Data: 10
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x14);  // Data: 20
+  response.EmplaceBack(0x06);  // Reference type
+  response.EmplaceBack(0x08);  // Data length
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x02);  // File 2
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x01);  // Record 1
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x2A);  // Data: 42
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x2B);  // Data: 43
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  std::vector<std::tuple<uint16_t, uint16_t, uint16_t>> records;
+  records.emplace_back(1, 0, 2);
+  records.emplace_back(2, 1, 2);
+  auto result = master.ReadFileRecord(kUnitId, records);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->size(), 2);
+  EXPECT_EQ(result->at({1, 0}).size(), 2);
+  EXPECT_EQ(result->at({2, 1}).size(), 2);
+  EXPECT_EQ(result->at({2, 1})[0], 42);
+}
+
+// ReadCoils with empty data
+TEST(TCPMasterCoverage, ReadCoils_EmptyData) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kReadCoils};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  // No data - data.empty()
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  auto result = master.ReadCoils(kUnitId, 0, 5);
+  EXPECT_FALSE(result.has_value());
+}
+
+// ReadInputRegisters with exception response
+TEST(TCPMasterCoverage, ReadInputRegisters_ExceptionResponse) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kReadIR};
+  response.SetExceptionCode(ExceptionCode::kIllegalDataAddress);
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  auto result = master.ReadInputRegisters(kUnitId, 0, 5);
+  EXPECT_FALSE(result.has_value());
+}
+
+// ReadExceptionStatus with exception response
+TEST(TCPMasterCoverage, ReadExceptionStatus_ExceptionResponse) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kReadExceptionStatus};
+  response.SetExceptionCode(ExceptionCode::kIllegalFunction);
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  auto result = master.ReadExceptionStatus(kUnitId);
+  EXPECT_FALSE(result.has_value());
+}
+
+// GetComEventCounter with exception response
+TEST(TCPMasterCoverage, GetComEventCounter_ExceptionResponse) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kGetComEventCounter};
+  response.SetExceptionCode(ExceptionCode::kIllegalFunction);
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  auto result = master.GetComEventCounter(kUnitId);
+  EXPECT_FALSE(result.has_value());
+}
+
+// ReadDiscreteInputs with wrong byte count
+TEST(TCPMasterCoverage, ReadDiscreteInputs_WrongByteCount) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kReadDI};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  response.EmplaceBack(2);  // Wrong byte count (should be 1 for 5 inputs)
+  response.EmplaceBack(0xFF);
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  auto result = master.ReadDiscreteInputs(kUnitId, 0, 5);
   EXPECT_FALSE(result.has_value());
 }

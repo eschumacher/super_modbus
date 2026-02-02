@@ -11,10 +11,6 @@
 #include "tcp/tcp_request.hpp"
 #include "tcp/tcp_response.hpp"
 
-using supermb::kCoilOnValue;
-using supermb::kExceptionFunctionCodeMask;
-using supermb::kFunctionCodeMask;
-
 namespace supermb {
 
 uint16_t TcpFrame::ExtractTransactionId(std::span<const uint8_t> frame) {
@@ -48,11 +44,6 @@ void TcpFrame::WriteTransactionId(std::vector<uint8_t> &frame, uint16_t transact
 void TcpFrame::WriteProtocolId(std::vector<uint8_t> &frame) {
   frame.push_back(GetHighByte(kProtocolId));
   frame.push_back(GetLowByte(kProtocolId));
-}
-
-void TcpFrame::WriteLength(std::vector<uint8_t> &frame, uint16_t length) {
-  frame.push_back(GetHighByte(length));
-  frame.push_back(GetLowByte(length));
 }
 
 void TcpFrame::WriteUnitId(std::vector<uint8_t> &frame, uint8_t unit_id) {
@@ -166,7 +157,7 @@ std::optional<TcpRequest> TcpFrame::DecodeRequest(std::span<const uint8_t> frame
   // Length field value = Unit ID(1) + PDU size
   // PDU = Function Code + Data = (length - 1) bytes (since length includes Unit ID)
   // Total frame size = 7 + (length - 1) = 6 + length
-  if (frame.size() < 6 + length) {
+  if (frame.size() < static_cast<size_t>(6 + length)) {
     return {};
   }
 
@@ -256,7 +247,7 @@ std::optional<TcpResponse> TcpFrame::DecodeResponse(std::span<const uint8_t> fra
   // Length field value = Unit ID(1) + PDU size
   // PDU = Function Code + Data = (length - 1) bytes (since length includes Unit ID)
   // Total frame size = 7 + (length - 1) = 6 + length
-  if (frame.size() < 6 + length) {
+  if (frame.size() < static_cast<size_t>(6 + length)) {
     return {};
   }
 

@@ -15,9 +15,6 @@
 #include "tcp/tcp_request.hpp"
 #include "tcp/tcp_response.hpp"
 
-using supermb::IsBroadcastableWrite;
-using supermb::MakeInt16;
-
 namespace supermb {
 
 std::optional<std::vector<int16_t>> TcpMaster::ReadHoldingRegisters(uint8_t unit_id, uint16_t start_address,
@@ -147,7 +144,7 @@ std::optional<std::vector<bool>> TcpMaster::ReadCoils(uint8_t unit_id, uint16_t 
   for (uint16_t i = 0; i < count; ++i) {
     uint8_t byte_index = i / 8;
     uint8_t bit_index = i % 8;
-    if (byte_index >= byte_count || (1 + byte_index) >= data.size()) {
+    if (byte_index >= byte_count || static_cast<size_t>(1 + byte_index) >= data.size()) {
       return {};
     }
     bool value = (data[1 + byte_index] & (1U << bit_index)) != 0;
@@ -190,7 +187,7 @@ std::optional<std::vector<bool>> TcpMaster::ReadDiscreteInputs(uint8_t unit_id, 
   for (uint16_t i = 0; i < count; ++i) {
     uint8_t byte_index = i / 8;
     uint8_t bit_index = i % 8;
-    if (byte_index >= byte_count || (1 + byte_index) >= data.size()) {
+    if (byte_index >= byte_count || static_cast<size_t>(1 + byte_index) >= data.size()) {
       return {};
     }
     bool value = (data[1 + byte_index] & (1U << bit_index)) != 0;
@@ -401,14 +398,13 @@ std::optional<std::vector<int16_t>> TcpMaster::ReadFIFOQueue(uint8_t unit_id, ui
     return {};
   }
 
-  // First 2 bytes: FIFO count (big-endian)
-  uint16_t fifo_count = MakeInt16(data[1], data[0]);
+  // First 2 bytes: byte count (big-endian) - Modbus FC24 response format
+  uint16_t byte_count = MakeInt16(data[1], data[0]);
+  // Next 2 bytes: FIFO count (big-endian)
+  uint16_t fifo_count = MakeInt16(data[3], data[2]);
   if (fifo_count == 0 || fifo_count > 31) {
     return {};  // Invalid FIFO count
   }
-
-  // Next 2 bytes: byte count (big-endian)
-  uint16_t byte_count = MakeInt16(data[3], data[2]);
   if (byte_count != fifo_count * 2) {
     return {};
   }

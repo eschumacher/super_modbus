@@ -913,3 +913,93 @@ TEST(TCPSlaveCoverage, ReadFrame_TimeoutDuringBodyRead) {
   bool processed = slave.ProcessIncomingFrame(transport, 10);  // Short timeout
   EXPECT_FALSE(processed);                                     // Should timeout waiting for remaining data
 }
+
+// Test Process with illegal function code (default case)
+TEST(TCPSlaveCoverage, Process_IllegalFunction) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+
+  TcpRequest request{{1, kUnitId, static_cast<FunctionCode>(0xFF)}};  // Unknown function code
+  request.SetRawData(std::vector<uint8_t>{});
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kIllegalFunction);
+}
+
+// Test ProcessDiagnostics success path
+TEST(TCPSlaveCoverage, ProcessDiagnostics_Success) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kDiagnostics}};
+  std::vector<uint8_t> data{0x00, 0x01, 0x12, 0x34};  // sub_func + echo data
+  request.SetRawData(data);
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  EXPECT_GE(response.GetData().size(), 2);
+}
+
+// Test ProcessGetComEventCounter success path
+TEST(TCPSlaveCoverage, ProcessGetComEventCounter_Success) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddHoldingRegisters({0, 1});  // Trigger at least one message for counter
+
+  TcpRequest req{{1, kUnitId, FunctionCode::kReadHR}};
+  req.SetAddressSpan({0, 1});
+  slave.Process(req);  // Increment counter
+
+  TcpRequest request{{2, kUnitId, FunctionCode::kGetComEventCounter}};
+  request.SetRawData(std::vector<uint8_t>{});
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  EXPECT_GE(response.GetData().size(), 3);
+}
+
+// Test ProcessGetComEventLog success path
+TEST(TCPSlaveCoverage, ProcessGetComEventLog_Success) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddHoldingRegisters({0, 1});
+
+  TcpRequest req{{1, kUnitId, FunctionCode::kReadHR}};
+  req.SetAddressSpan({0, 1});
+  slave.Process(req);
+
+  TcpRequest request{{2, kUnitId, FunctionCode::kGetComEventLog}};
+  request.SetRawData(std::vector<uint8_t>{});
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  EXPECT_GE(response.GetData().size(), 2);
+}
+
+// Test ProcessReportSlaveID success path
+TEST(TCPSlaveCoverage, ProcessReportSlaveID_Success) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kReportSlaveID}};
+  request.SetRawData(std::vector<uint8_t>{});
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  EXPECT_GE(response.GetData().size(), 2);
+}
+
+// Test ProcessWriteFileRecord success path
+TEST(TCPSlaveCoverage, ProcessWriteFileRecord_Success) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kWriteFileRecord}};
+  std::vector<std::tuple<uint16_t, uint16_t, std::vector<int16_t>>> records;
+  records.emplace_back(1, 0, std::vector<int16_t>{100, 200});
+  request.SetWriteFileRecordData(records);
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  EXPECT_GT(response.GetData().size(), 0);
+}

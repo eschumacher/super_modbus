@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <numeric>
 #include <span>
 #include <tuple>
 #include <vector>
@@ -8,11 +9,6 @@
 #include "common/byte_helpers.hpp"
 #include "common/function_code.hpp"
 #include "tcp/tcp_request.hpp"
-
-using supermb::kCoilByteCountRoundingOffset;
-using supermb::kCoilOnValue;
-using supermb::kCoilsPerByte;
-using supermb::kFileRecordReferenceType;
 
 namespace supermb {
 
@@ -341,10 +337,9 @@ bool TcpRequest::SetWriteFileRecordData(
 
   // Calculate total size: byte_count(1) + sum of (reference_type(1) + file_number(2) + record_number(2) +
   // record_length(2) + record_data(record_length*2))
-  size_t total_size = 1;
-  for (const auto &record : file_records) {
-    total_size += 7 + std::get<2>(record).size() * 2;
-  }
+  size_t total_size =
+      std::accumulate(file_records.begin(), file_records.end(), size_t{1},
+                      [](size_t sum, const auto &record) { return sum + 7 + std::get<2>(record).size() * 2; });
 
   data_.clear();
   data_.resize(total_size);

@@ -826,3 +826,132 @@ TEST(RtuSlaveCoverage, SetFloat_OutOfRange) {
   EXPECT_FALSE(slave.SetFloat(2, 1.0f));
   EXPECT_TRUE(slave.SetFloat(1, 1.0f));
 }
+
+// Read coils from address not in map -> IllegalDataAddress
+TEST(RtuSlaveCoverage, ProcessReadCoils_IllegalDataAddress) {
+  static constexpr uint8_t kSlaveId{1};
+  RtuSlave slave{kSlaveId};
+  slave.AddCoils({0, 8});  // Coils at 0-7 only
+
+  RtuRequest request{{kSlaveId, FunctionCode::kReadCoils}};
+  request.SetAddressSpan({10, 5});  // Address 10 not in map
+
+  RtuResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kIllegalDataAddress);
+}
+
+// Write multiple registers overlapping float range (not entirely within) -> IllegalDataAddress
+TEST(RtuSlaveCoverage, ProcessWriteMultipleRegisters_FloatRangeOverlap) {
+  static constexpr uint8_t kSlaveId{1};
+  RtuSlave slave{kSlaveId};
+  slave.AddFloatRange(10, 4);          // Float range 10-13
+  slave.AddHoldingRegisters({0, 20});  // Normal regs 0-19
+
+  RtuRequest request{{kSlaveId, FunctionCode::kWriteMultRegs}};
+  std::vector<int16_t> vals{0x11, 0x22, 0x33, 0x44};  // 4 registers
+  request.SetWriteMultipleRegistersData(8, 4, vals);  // Write 8-11, overlaps float 10-13
+
+  RtuResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kIllegalDataAddress);
+}
+
+// Write multiple coils to address not in map -> IllegalDataAddress
+TEST(RtuSlaveCoverage, ProcessWriteMultipleCoils_AddressOutOfBounds) {
+  static constexpr uint8_t kSlaveId{1};
+  RtuSlave slave{kSlaveId};
+  slave.AddCoils({0, 8});  // Coils 0-7 only
+
+  RtuRequest request{{kSlaveId, FunctionCode::kWriteMultCoils}};
+  const std::array<bool, 8> coils{true, false, true, false, true, false, true, false};
+  ASSERT_TRUE(request.SetWriteMultipleCoilsData(10, 8, coils));  // Address 10 not in map
+
+  RtuResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kIllegalDataAddress);
+}
+
+// Read file record: byte_count=5, 5 payload bytes -> data_offset(1)+6 > size(6)
+TEST(RtuSlaveCoverage, ProcessReadFileRecord_InsufficientDataForOneRecord) {
+  static constexpr uint8_t kSlaveId{1};
+  RtuSlave slave{kSlaveId};
+
+  RtuRequest request{{kSlaveId, FunctionCode::kReadFileRecord}};
+  std::vector<uint8_t> data;
+  data.push_back(5);  // byte_count = 5 (need 6 bytes per record for file_num+rec_num+rec_len)
+  data.push_back(0);
+  data.push_back(1);
+  data.push_back(0);
+  data.push_back(0);
+  data.push_back(0);  // Only 5 bytes after byte_count; first record needs 6
+  request.SetRawData(data);
+
+  RtuResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kIllegalDataValue);
+}
+
+// Mask write to address not in map -> IllegalDataAddress
+TEST(RtuSlaveCoverage, ProcessMaskWriteRegister_AddressOutOfBounds) {
+  static constexpr uint8_t kSlaveId{1};
+  RtuSlave slave{kSlaveId};
+  slave.AddHoldingRegisters({0, 10});  // Registers 0-9 only
+
+  RtuRequest request{{kSlaveId, FunctionCode::kMaskWriteReg}};
+  ASSERT_TRUE(request.SetMaskWriteRegisterData(20, 0xFFFF, 0x0000));
+
+  RtuResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kIllegalDataAddress);
+}
+
+// ReadWriteMultipleRegisters with both read and write in float range
+TEST(RtuSlaveCoverage, ProcessReadWriteMultipleRegisters_FloatRangeWriteAndRead) {
+  static constexpr uint8_t kSlaveId{1};
+  RtuSlave slave{kSlaveId};
+  slave.AddFloatRange(0, 4);  // Registers 0-3 = 2 floats
+  slave.SetFloat(0, 1.0f);
+  slave.SetFloat(1, 2.0f);
+
+  uint8_t write_buf[8];
+  supermb::EncodeFloat(3.0f, supermb::ByteOrder::BigEndian, supermb::WordOrder::HighWordFirst, write_buf);
+  supermb::EncodeFloat(4.0f, supermb::ByteOrder::BigEndian, supermb::WordOrder::HighWordFirst, write_buf + 4);
+
+  std::vector<uint8_t> data;
+  data.push_back(0x00);
+  data.push_back(0x00);  // read_start = 0
+  data.push_back(0x00);
+  data.push_back(0x04);  // read_count = 4
+  data.push_back(0x00);
+  data.push_back(0x00);  // write_start = 0
+  data.push_back(0x00);
+  data.push_back(0x04);  // write_count = 4
+  data.push_back(0x08);  // write_byte_count = 8
+  data.insert(data.end(), write_buf, write_buf + 8);
+
+  RtuRequest request{{kSlaveId, FunctionCode::kReadWriteMultRegs}};
+  request.SetRawData(data);
+
+  RtuResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  auto resp_data = response.GetData();
+  ASSERT_GE(resp_data.size(), 8u);  // 8 bytes (2 floats); float path does not prepend byte_count
+  float r0 = supermb::DecodeFloat(&resp_data[0], supermb::ByteOrder::BigEndian, supermb::WordOrder::HighWordFirst);
+  float r1 = supermb::DecodeFloat(&resp_data[4], supermb::ByteOrder::BigEndian, supermb::WordOrder::HighWordFirst);
+  EXPECT_FLOAT_EQ(r0, 3.0f);
+  EXPECT_FLOAT_EQ(r1, 4.0f);
+}
+
+// Com event log fill via ProcessIncomingFrame to cover erase path in ProcessIncomingFrame
+TEST(RtuSlaveCoverage, ComEventLog_MaxSize_ViaProcessIncomingFrame) {
+  static constexpr uint8_t kSlaveId{1};
+  MemoryTransport transport;
+  RtuSlave slave{kSlaveId};
+  slave.AddHoldingRegisters({0, 10});
+
+  for (int i = 0; i < 66; ++i) {
+    RtuRequest request{{kSlaveId, FunctionCode::kReadHR}};
+    request.SetAddressSpan({0, 1});
+    auto frame = RtuFrame::EncodeRequest(request);
+    transport.SetReadData(frame);
+    transport.ResetReadPosition();
+    bool ok = slave.ProcessIncomingFrame(transport, 100);
+    EXPECT_TRUE(ok);
+  }
+}

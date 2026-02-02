@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <span>
 #include <tuple>
@@ -8,15 +9,6 @@
 #include <utility>
 #include <vector>
 
-// Hash function for std::pair<uint16_t, uint16_t> to use with std::unordered_map
-namespace std {
-template <>
-struct hash<std::pair<uint16_t, uint16_t>> {
-  size_t operator()(const std::pair<uint16_t, uint16_t> &p) const noexcept {
-    return std::hash<uint16_t>{}(p.first) ^ (std::hash<uint16_t>{}(p.second) << 1);
-  }
-};
-}  // namespace std
 #include "../common/address_span.hpp"
 #include "../common/exception_code.hpp"
 #include "../common/function_code.hpp"
@@ -27,6 +19,13 @@ struct hash<std::pair<uint16_t, uint16_t>> {
 #include "tcp_response.hpp"
 
 namespace supermb {
+
+/** Custom hasher for std::pair<uint16_t, uint16_t> (avoids undefined behavior of specializing std::hash). */
+struct PairU16Hasher {
+  size_t operator()(const std::pair<uint16_t, uint16_t> &p) const noexcept {
+    return std::hash<uint16_t>{}(p.first) ^ (std::hash<uint16_t>{}(p.second) << 1);
+  }
+};
 
 /**
  * @brief Modbus TCP Master/Client implementation
@@ -196,8 +195,8 @@ class TcpMaster {
    * @param file_records Vector of (file_number, record_number, record_length) tuples
    * @return Map of (file_number, record_number) -> record_data, or empty if error
    */
-  [[nodiscard]] std::optional<std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int16_t>>> ReadFileRecord(
-      uint8_t unit_id, std::span<const std::tuple<uint16_t, uint16_t, uint16_t>> file_records);
+  [[nodiscard]] std::optional<std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int16_t>, PairU16Hasher>>
+  ReadFileRecord(uint8_t unit_id, std::span<const std::tuple<uint16_t, uint16_t, uint16_t>> file_records);
 
   /**
    * @brief Write file record (FC 21)

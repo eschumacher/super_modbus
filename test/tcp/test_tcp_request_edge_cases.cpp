@@ -176,6 +176,18 @@ TEST(TCPRequestEdgeCases, SetWriteFileRecordDataTooMany) {
   EXPECT_FALSE(result);  // Too many file records should fail
 }
 
+// Total size > 252 (Modbus PDU limit) triggers rejection
+TEST(TCPRequestEdgeCases, SetWriteFileRecordData_TotalSizeExceedsLimit) {
+  TcpRequest request{{0, 1, FunctionCode::kWriteFileRecord}};
+  // One record with 123 registers: 1 + 7 + 123*2 = 254 > 252
+  std::vector<int16_t> large_record(123, 0);
+  std::vector<std::tuple<uint16_t, uint16_t, std::vector<int16_t>>> file_records;
+  file_records.emplace_back(1, 0, large_record);
+
+  bool result = request.SetWriteFileRecordData(file_records);
+  EXPECT_FALSE(result);
+}
+
 TEST(TCPRequestEdgeCases, SetRawData) {
   TcpRequest request{{0, 1, FunctionCode::kReadHR}};
   std::vector<uint8_t> data{0x00, 0x01, 0x00, 0x05};

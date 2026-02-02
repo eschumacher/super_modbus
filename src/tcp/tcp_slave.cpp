@@ -33,7 +33,8 @@ constexpr uint32_t kDefaultPollTimeoutMs = 100;
 constexpr uint8_t kMaxByteValue = 0xFF;
 constexpr size_t kFileRecordMinHeaderSize =
     7;  // reference_type(1) + file_number(2) + record_number(2) + record_length(2)
-constexpr size_t kFileRecordReadMinSize = 6;  // file_number(2) + record_number(2) + record_length(2)
+constexpr size_t kFileRecordReadMinSize =
+    7;  // reference_type(1) + file_number(2) + record_number(2) + record_length(2)
 // Array index offsets for ReadWriteMultipleRegisters
 constexpr size_t kReadWriteReadStartOffset = 0;
 constexpr size_t kReadWriteReadCountOffset = 2;
@@ -44,10 +45,12 @@ constexpr size_t kReadWriteByteCountOffset = 8;
 constexpr size_t kMaskWriteAddressOffset = 0;
 constexpr size_t kMaskWriteAndMaskOffset = 2;
 constexpr size_t kMaskWriteOrMaskOffset = 4;
-// Array index offsets for file record read
-constexpr size_t kFileRecordReadFileNumberOffset = 0;
-constexpr size_t kFileRecordReadRecordNumberOffset = 2;
-constexpr size_t kFileRecordReadRecordLengthOffset = 4;
+// Array index offsets for file record read (per sub-request: reference_type(1) + file_number(2) + record_number(2) +
+// record_length(2))
+constexpr size_t kFileRecordReadReferenceTypeOffset = 0;
+constexpr size_t kFileRecordReadFileNumberOffset = 1;
+constexpr size_t kFileRecordReadRecordNumberOffset = 3;
+constexpr size_t kFileRecordReadRecordLengthOffset = 5;
 }  // namespace
 
 TcpResponse TcpSlave::Process(const TcpRequest &request) {
@@ -499,7 +502,7 @@ void TcpSlave::ProcessReportSlaveID(const TcpRequest & /*request*/, TcpResponse 
 
 void TcpSlave::ProcessReadFileRecord(const TcpRequest &request, TcpResponse &response) const {
   // FC 20: Read File Record - Read records from files
-  // Request format: byte_count (1) + [file_number (2) + record_number (2) + record_length (2)] * N
+  // Request format: byte_count (1) + [reference_type (1) + file_number (2) + record_number (2) + record_length (2)] * N
   const auto &data = request.GetData();
   if (data.empty()) {
     response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
@@ -523,7 +526,11 @@ void TcpSlave::ProcessReadFileRecord(const TcpRequest &request, TcpResponse &res
       return;
     }
 
-    // File record read format: file_number(2) + record_number(2) + record_length(2) = 6 bytes
+    // Per Modbus spec: reference_type (1) + file_number (2) + record_number (2) + record_length (2) = 7 bytes
+    if (data[data_offset + kFileRecordReadReferenceTypeOffset] != kFileRecordReferenceType) {
+      response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
+      return;
+    }
     uint16_t file_number = MakeInt16(data[data_offset + kFileRecordReadFileNumberOffset + 1],
                                      data[data_offset + kFileRecordReadFileNumberOffset]);
     uint16_t record_number = MakeInt16(data[data_offset + kFileRecordReadRecordNumberOffset + 1],

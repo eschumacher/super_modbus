@@ -1003,3 +1003,27 @@ TEST(TCPSlaveCoverage, ProcessWriteFileRecord_Success) {
   EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
   EXPECT_GT(response.GetData().size(), 0);
 }
+
+// Test ProcessReadFileRecord success path (read after write)
+TEST(TCPSlaveCoverage, ProcessReadFileRecord_Success) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+
+  // Create file 1, record 0 with data via WriteFileRecord
+  TcpRequest write_req{{1, kUnitId, FunctionCode::kWriteFileRecord}};
+  std::vector<std::tuple<uint16_t, uint16_t, std::vector<int16_t>>> write_records;
+  write_records.emplace_back(1, 0, std::vector<int16_t>{0x0D, 0xFE, 0x00, 0x20});
+  write_req.SetWriteFileRecordData(write_records);
+  TcpResponse write_resp = slave.Process(write_req);
+  ASSERT_EQ(write_resp.GetExceptionCode(), ExceptionCode::kAcknowledge);
+
+  // Read file 1, record 0, length 4 (4 registers)
+  TcpRequest read_req{{2, kUnitId, FunctionCode::kReadFileRecord}};
+  std::vector<std::tuple<uint16_t, uint16_t, uint16_t>> read_records;
+  read_records.emplace_back(1, 0, 4);
+  read_req.SetReadFileRecordData(read_records);
+
+  TcpResponse read_resp = slave.Process(read_req);
+  EXPECT_EQ(read_resp.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  EXPECT_GT(read_resp.GetData().size(), 0);
+}

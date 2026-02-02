@@ -633,6 +633,30 @@ TEST(TCPMasterCoverage, ReadFileRecord_InsufficientDataForHeader) {
 }
 
 // Test ReadFileRecord with invalid reference type
+TEST(TCPMasterCoverage, ReadFileRecord_ResponseInsufficientForRecordHeader) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  // Response with byte_count=7 but only 4 bytes of data (insufficient for 6-byte sub-response header)
+  TcpResponse response{1, kUnitId, FunctionCode::kReadFileRecord};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  response.EmplaceBack(4);     // response_length = 4 (only 4 bytes follow)
+  response.EmplaceBack(0x06);  // ref type
+  response.EmplaceBack(0x00);  // data_length
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x00);  // incomplete
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  std::vector<std::tuple<uint16_t, uint16_t, uint16_t>> records;
+  records.emplace_back(1, 0, 1);
+  auto result = master.ReadFileRecord(kUnitId, records);
+  EXPECT_FALSE(result.has_value());
+}
+
 TEST(TCPMasterCoverage, ReadFileRecord_InvalidReferenceType) {
   static constexpr uint8_t kUnitId{1};
   MemoryTransport transport;
@@ -925,6 +949,16 @@ TEST(TCPMasterCoverage, ReadFrame_ZeroBytesReadRetry) {
   EXPECT_EQ(result->GetUnitId(), kUnitId);
 }
 
+// Test ReadHoldingRegisters with no response (timeout)
+TEST(TCPMasterCoverage, ReadHoldingRegisters_NoResponse) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport(0);  // Empty - no response data
+  TcpMaster master{transport};
+
+  auto result = master.ReadHoldingRegisters(kUnitId, 0, 5);
+  EXPECT_FALSE(result.has_value());
+}
+
 // Test ReadHoldingRegisters with SetAddressSpan failure
 TEST(TCPMasterCoverage, ReadHoldingRegisters_SetAddressSpanFailure) {
   static constexpr uint8_t kUnitId{1};
@@ -937,6 +971,16 @@ TEST(TCPMasterCoverage, ReadHoldingRegisters_SetAddressSpanFailure) {
   auto result = master.ReadHoldingRegisters(kUnitId, 0, 0);  // Zero count
   // Should handle gracefully - either return empty or fail
   // The actual behavior depends on implementation
+}
+
+// Test ReadInputRegisters with no response (timeout)
+TEST(TCPMasterCoverage, ReadInputRegisters_NoResponse) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport(0);  // Empty - no response data
+  TcpMaster master{transport};
+
+  auto result = master.ReadInputRegisters(kUnitId, 0, 5);
+  EXPECT_FALSE(result.has_value());
 }
 
 // Test ReadInputRegisters with SetAddressSpan failure path

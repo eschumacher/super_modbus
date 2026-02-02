@@ -16,6 +16,18 @@ using supermb::TcpFrame;
 using supermb::TcpRequest;
 using supermb::TcpResponse;
 
+TEST(TCPFrameEdgeCases, IsRequestFrameCompleteEmptyFrame) {
+  std::vector<uint8_t> frame;
+  EXPECT_FALSE(TcpFrame::IsRequestFrameComplete(frame));
+}
+
+TEST(TCPFrameEdgeCases, IsRequestFrameCompleteOnlyHeader) {
+  std::vector<uint8_t> frame(7, 0);  // 7 bytes - MBAP header only, length=0 so need 6 bytes total
+  frame[4] = 0x00;
+  frame[5] = 0x00;                                       // length = 0
+  EXPECT_TRUE(TcpFrame::IsRequestFrameComplete(frame));  // 7 >= 6+0
+}
+
 TEST(TCPFrameEdgeCases, DecodeRequestTooShort) {
   std::vector<uint8_t> frame{0x00, 0x01};  // Only 2 bytes, need at least MBAP header (7)
   auto decoded = TcpFrame::DecodeRequest(frame);

@@ -430,8 +430,8 @@ std::optional<std::vector<int16_t>> TcpMaster::ReadFIFOQueue(uint8_t unit_id, ui
   return fifo_data;
 }
 
-std::optional<std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int16_t>>> TcpMaster::ReadFileRecord(
-    uint8_t unit_id, std::span<const std::tuple<uint16_t, uint16_t, uint16_t>> file_records) {
+std::optional<std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int16_t>, PairU16Hasher>>
+TcpMaster::ReadFileRecord(uint8_t unit_id, std::span<const std::tuple<uint16_t, uint16_t, uint16_t>> file_records) {
   uint16_t transaction_id = GetNextTransactionId();
   TcpRequest request({transaction_id, unit_id, FunctionCode::kReadFileRecord});
   if (!request.SetReadFileRecordData(file_records)) {
@@ -454,7 +454,7 @@ std::optional<std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int1
     return {};
   }
 
-  std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int16_t>> result;
+  std::unordered_map<std::pair<uint16_t, uint16_t>, std::vector<int16_t>, PairU16Hasher> result;
   size_t offset = 1;                        // Skip response_length
   size_t end_offset = 1 + response_length;  // End of response data
 

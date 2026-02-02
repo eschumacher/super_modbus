@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <climits>
 #include <numeric>
 #include <span>
 #include <tuple>
@@ -183,8 +184,13 @@ bool TcpRequest::SetDiagnosticsData(uint16_t sub_function_code, std::span<const 
     return false;
   }
 
+  constexpr size_t kMaxSafeDataSize = SIZE_MAX - 2;
+  if (data.size() > kMaxSafeDataSize) {
+    return false;
+  }
+  const size_t total_size = 2 + data.size();
   this->data_.clear();
-  this->data_.resize(2 + data.size());
+  this->data_.resize(total_size);
 
   // Sub-function code (big-endian: high byte first)
   this->data_[0] = GetHighByte(sub_function_code);
@@ -341,6 +347,9 @@ bool TcpRequest::SetWriteFileRecordData(
       std::accumulate(file_records.begin(), file_records.end(), size_t{1},
                       [](size_t sum, const auto &record) { return sum + 7 + std::get<2>(record).size() * 2; });
 
+  if (total_size == 0 || total_size > 252) {  // Modbus PDU max ~253 bytes for data
+    return false;
+  }
   data_.clear();
   data_.resize(total_size);
 

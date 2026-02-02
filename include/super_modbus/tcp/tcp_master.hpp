@@ -42,8 +42,7 @@ class TcpMaster {
    * @param transport Transport layer for byte I/O
    */
   explicit TcpMaster(ByteTransport &transport)
-      : transport_(transport),
-  {}
+      : transport_(transport) {}
 
   /**
    * @brief Read holding registers from a unit

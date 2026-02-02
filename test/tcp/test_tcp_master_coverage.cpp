@@ -618,25 +618,26 @@ TEST(TCPMasterCoverage, ReadFIFOQueue_DataSizeTooSmall) {
   EXPECT_FALSE(result.has_value());
 }
 
-// Test ReadFIFOQueue with invalid FIFO count (0)
-TEST(TCPMasterCoverage, ReadFIFOQueue_InvalidFIFOCountZero) {
+// ReadFIFOQueue with fifo_count 0 (empty queue) is valid per Modbus spec
+TEST(TCPMasterCoverage, ReadFIFOQueue_EmptyQueue) {
   static constexpr uint8_t kUnitId{1};
   MemoryTransport transport;
   TcpMaster master{transport};
 
   TcpResponse response{1, kUnitId, FunctionCode::kReadFIFOQueue};
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
-  response.EmplaceBack(0x00);  // High byte of byte count
-  response.EmplaceBack(0x00);  // Low byte of byte count (0)
+  response.EmplaceBack(0x00);  // High byte of byte count (2 = 2 + 0*2)
+  response.EmplaceBack(0x02);  // Low byte of byte count
   response.EmplaceBack(0x00);  // High byte of FIFO count
-  response.EmplaceBack(0x00);  // Low byte of FIFO count (0 - invalid)
+  response.EmplaceBack(0x00);  // Low byte of FIFO count (0 = empty queue, valid)
 
   auto frame = TcpFrame::EncodeResponse(response);
   transport.SetReadData(frame);
   transport.ResetReadPosition();
 
   auto result = master.ReadFIFOQueue(kUnitId, 0);
-  EXPECT_FALSE(result.has_value());
+  ASSERT_TRUE(result.has_value());
+  EXPECT_TRUE(result->empty());
 }
 
 // Test ReadFIFOQueue with invalid FIFO count (>31)

@@ -404,10 +404,10 @@ std::optional<std::vector<int16_t>> TcpMaster::ReadFIFOQueue(uint8_t unit_id, ui
 
   // First 2 bytes: byte count (big-endian) - Modbus FC24 response format
   uint16_t byte_count = MakeInt16(data[1], data[0]);
-  // Next 2 bytes: FIFO count (big-endian)
+  // Next 2 bytes: FIFO count (big-endian). Zero is valid (empty queue per Modbus spec).
   uint16_t fifo_count = MakeInt16(data[3], data[2]);
-  if (fifo_count == 0 || fifo_count > 31) {
-    return {};  // Invalid FIFO count
+  if (fifo_count > 31) {
+    return {};  // Invalid FIFO count (max 31 per Modbus)
   }
   // Per Modbus spec: byte_count includes the 2-byte FIFO count field + data
   if (byte_count != 2 + (fifo_count * 2)) {

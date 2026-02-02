@@ -51,7 +51,7 @@ TEST(FIFOQueue, SlaveReadFIFOQueue_EmptyQueue) {
 
   RtuSlave slave{kSlaveId};
 
-  // Set up empty FIFO queue
+  // Set up empty FIFO queue (valid per Modbus spec)
   std::vector<int16_t> empty_fifo;
   slave.SetFIFOQueue(0, empty_fifo);
 
@@ -59,8 +59,13 @@ TEST(FIFOQueue, SlaveReadFIFOQueue_EmptyQueue) {
   request.SetReadFIFOQueueData(0);
   RtuResponse response = slave.Process(request);
 
-  // Empty queue should return illegal data address
-  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kIllegalDataAddress);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  auto data = response.GetData();
+  ASSERT_GE(data.size(), 4);
+  uint16_t byte_count = MakeInt16(data[1], data[0]);
+  uint16_t fifo_count = MakeInt16(data[3], data[2]);
+  EXPECT_EQ(fifo_count, 0);
+  EXPECT_EQ(byte_count, 0);  // fifo_count*2 for empty queue (RTU format)
 }
 
 TEST(FIFOQueue, SlaveReadFIFOQueue_InvalidAddress) {

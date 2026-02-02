@@ -743,9 +743,9 @@ void TcpSlave::ProcessReadFIFOQueue(const TcpRequest &request, TcpResponse &resp
 
   uint16_t fifo_address = MakeInt16(data[1], data[0]);
 
-  // Check if FIFO queue exists
+  // Check if FIFO queue exists (empty queue is valid per Modbus spec)
   auto fifo_it = fifo_storage_.find(fifo_address);
-  if (fifo_it == fifo_storage_.end() || fifo_it->second.empty()) {
+  if (fifo_it == fifo_storage_.end()) {
     response.SetExceptionCode(ExceptionCode::kIllegalDataAddress);
     return;
   }

@@ -14,7 +14,9 @@ A modern C++ Modbus library designed for easy integration into any project. The 
 - **Slave/Server Functionality**: Process Modbus requests and respond
 - **Modern C++20**: Uses modern C++ features for type safety and performance
 - **Header-Only Components**: Many utilities are header-only for easy integration
-- **Comprehensive Test Suite**: 280+ tests covering all function codes and edge cases for both RTU and TCP
+- **Configurable wire format**: Byte order (big-endian default, little-endian for Enron-style) and word order for 32-bit values; optional float count semantics
+- **32-bit float support**: Master `ReadFloats`/`WriteFloats` and slave `AddFloatRange`/`SetFloat` for two-register floats with configurable byte/word order
+- **Comprehensive Test Suite**: 630+ tests covering all function codes and edge cases for both RTU and TCP
 
 ## Architecture
 
@@ -181,6 +183,18 @@ public:
 
 The `MemoryTransport` class is provided for testing purposes only.
 
+### Wire format and 32-bit floats
+
+Byte and word order are configurable via `WireFormatOptions` (defaults: big-endian byte order, high word first for 32-bit values). This allows interoperability with **Enron Modbus** and other little-endian or custom wire formats.
+
+- **Byte order**: `ByteOrder::BigEndian` (default, standard Modbus) or `ByteOrder::LittleEndian` (e.g. Enron Modbus).
+- **Word order**: For 32-bit values in two consecutive registers, `WordOrder::HighWordFirst` (default) or `WordOrder::LowWordFirst`.
+- Pass options when constructing master or slave: `RtuMaster(transport, options)`, `TcpSlave(unit_id, options)`, etc.
+
+**Master float API**: `ReadFloats(slave_id, start_address, count)` and `WriteFloats(slave_id, start_address, values)` read/write 32-bit floats as two registers each. Count is in floats by default (Enron-style); optional `FloatCountSemantics` in `WireFormatOptions` can use register count instead.
+
+**Slave float API**: `AddFloatRange(start_register, register_count)` reserves a range of registers for floats (register_count must be even). `SetFloat(float_index, value)` sets a float by index. Single-register writes to that range are rejected; use the float APIs or multi-register writes for that range.
+
 ## Implementation Status
 
 ### Fully Implemented Function Codes
@@ -282,7 +296,7 @@ Note: TCP follows the same patterns as RTU; use `TcpMaster`/`TcpSlave` with a so
 
 ### Unit Tests
 
-The library includes a comprehensive test suite with 280+ tests covering:
+The library includes a comprehensive test suite with 630+ tests covering:
 - All function codes (FC 1-24) for both RTU and TCP
 - Error handling and exception responses
 - Edge cases and boundary conditions

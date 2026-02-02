@@ -456,9 +456,11 @@ void TcpSlave::ProcessDiagnostics(const TcpRequest &request, TcpResponse &respon
 }
 
 void TcpSlave::ProcessGetComEventCounter(const TcpRequest & /*request*/, TcpResponse &response) const {
-  // FC 11: Get Com Event Counter - Returns 2 bytes: status (1) + event count (2)
+  // FC 11: Get Com Event Counter - Returns status (2 bytes) + event count (2 bytes)
+  // Per Modbus spec: status is a 2-byte word (0x0000 = ready, 0xFFFF = busy)
   // Modbus uses big-endian: high byte first, then low byte
-  response.EmplaceBack(0x00);  // Status: 0x00 = no error, 0xFF = error
+  response.EmplaceBack(0x00);  // Status high byte
+  response.EmplaceBack(0x00);  // Status low byte (0x0000 = ready)
   response.EmplaceBack(GetHighByte(com_event_counter_));
   response.EmplaceBack(GetLowByte(com_event_counter_));
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
@@ -743,7 +745,8 @@ void TcpSlave::ProcessReadFIFOQueue(const TcpRequest &request, TcpResponse &resp
 
   const FIFOQueue &fifo_queue = fifo_it->second;
   auto fifo_count = static_cast<uint16_t>(fifo_queue.size());
-  uint16_t byte_count = fifo_count * 2;  // Each register is 2 bytes
+  // Per Modbus spec: byte_count includes the 2-byte FIFO count field + data
+  uint16_t byte_count = 2 + (fifo_count * 2);  // 2 for fifo_count + data bytes
 
   // FIFO response: byte count (2), FIFO count (2), FIFO data (fifo_count * 2)
   // Modbus RTU uses big-endian: high byte first, then low byte

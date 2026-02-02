@@ -287,13 +287,17 @@ std::optional<std::pair<uint8_t, uint16_t>> TcpMaster::GetComEventCounter(uint8_
     return {};
   }
   auto response_data = response->GetData();
-  if (response_data.size() < 3) {
+  if (response_data.size() < 4) {
     return {};
   }
-  uint8_t status = response_data[0];
-  // Modbus uses big-endian: data[1] is high byte, data[2] is low byte
-  uint16_t event_count = MakeInt16(response_data[2], response_data[1]);
-  return std::make_pair(status, event_count);
+  // Per Modbus spec: status is 2 bytes (0x0000 = ready, 0xFFFF = busy)
+  // Modbus uses big-endian: data[0] is high byte, data[1] is low byte
+  uint16_t status = MakeInt16(response_data[1], response_data[0]);
+  // Event count: data[2] is high byte, data[3] is low byte
+  uint16_t event_count = MakeInt16(response_data[3], response_data[2]);
+  // Return status as uint8_t for backward compatibility (0x00 or 0xFF)
+  uint8_t status_byte = (status == 0xFFFF) ? 0xFF : 0x00;
+  return std::make_pair(status_byte, event_count);
 }
 
 std::optional<std::vector<uint8_t>> TcpMaster::GetComEventLog(uint8_t unit_id) {
@@ -405,11 +409,13 @@ std::optional<std::vector<int16_t>> TcpMaster::ReadFIFOQueue(uint8_t unit_id, ui
   if (fifo_count == 0 || fifo_count > 31) {
     return {};  // Invalid FIFO count
   }
-  if (byte_count != fifo_count * 2) {
+  // Per Modbus spec: byte_count includes the 2-byte FIFO count field + data
+  if (byte_count != 2 + (fifo_count * 2)) {
     return {};
   }
 
-  if (data.size() < static_cast<size_t>(4 + byte_count)) {
+  // Data size check: byte_count(2) + fifo_count(2) + fifo_data(fifo_count*2)
+  if (data.size() < static_cast<size_t>(4 + fifo_count * 2)) {
     return {};
   }
 

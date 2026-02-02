@@ -805,7 +805,8 @@ TEST(TCPMasterCoverage, AllFunctionCodes_Success) {
   {
     TcpResponse response{3, kUnitId, FunctionCode::kGetComEventCounter};
     response.SetExceptionCode(ExceptionCode::kAcknowledge);
-    response.EmplaceBack(0x00);  // Status
+    response.EmplaceBack(0x00);  // Status high byte
+    response.EmplaceBack(0x00);  // Status low byte (0x0000 = ready)
     response.EmplaceBack(0x00);  // High byte of event count
     response.EmplaceBack(0x05);  // Low byte of event count
     auto frame = TcpFrame::EncodeResponse(response);
@@ -1114,9 +1115,9 @@ TEST(TCPMasterCoverage, ReadFIFOQueue_Success) {
 
   TcpResponse response{1, kUnitId, FunctionCode::kReadFIFOQueue};
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
-  // Modbus FC24 format: byte_count first, then fifo_count (big-endian)
+  // Modbus FC24 format: byte_count (includes fifo_count field + data), then fifo_count (big-endian)
   response.EmplaceBack(0x00);  // byte_count high
-  response.EmplaceBack(0x04);  // byte_count low (4)
+  response.EmplaceBack(0x06);  // byte_count low (2 + 2*2 = 6)
   response.EmplaceBack(0x00);  // fifo_count high
   response.EmplaceBack(0x02);  // fifo_count low (2 entries)
   response.EmplaceBack(0x00);  // value 0 high

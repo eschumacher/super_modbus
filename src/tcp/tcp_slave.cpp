@@ -405,14 +405,27 @@ bool TcpSlave::ProcessIncomingFrame(ByteTransport &transport, uint32_t timeout_m
   }
 
   // Check if this request is for this slave
-  // Accept broadcast (slave ID 0) for write operations only
+  // Accept broadcast (unit ID 0) for write operations only (Modbus spec: no response for broadcast)
   uint8_t request_unit_id = request->GetUnitId();
-  if (request_unit_id != id_) {
+  bool is_broadcast = (request_unit_id == 0);
+  bool is_broadcastable_write = IsBroadcastableWrite(request->GetFunctionCode());
+
+  if (is_broadcast) {
+    if (!is_broadcastable_write) {
+      return false;  // Invalid broadcast (read operations cannot be broadcast)
+    }
+    // Process broadcast write; no response sent per Modbus spec
+  } else if (request_unit_id != id_) {
     return false;  // Not for this slave
   }
 
   // Process the request (Process increments com_event_counter_, message_count_, and adds to com_event_log_)
   TcpResponse response = Process(*request);
+
+  // Broadcast messages don't receive responses (Modbus spec)
+  if (is_broadcast) {
+    return true;  // Successfully processed broadcast, but no response sent
+  }
 
   // Encode and send response
   std::vector<uint8_t> response_frame = TcpFrame::EncodeResponse(response);

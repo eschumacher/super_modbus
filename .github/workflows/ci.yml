@@ -76,8 +76,9 @@ jobs:
     - name: Run clang-tidy
       run: |
         cd build
+        # -I../include/super_modbus ensures headers are found when using compile_commands.json from build/
         find ../src ../include ../test -type f \( -name "*.cpp" -o -name "*.hpp" \) \
-          -exec clang-tidy {} -p . -- -std=c++20 \; || true
+          -exec clang-tidy {} -p . -- -std=c++20 -I../include/super_modbus \; || true
         # Note: clang-tidy warnings don't fail the build, but output is visible
 
     - name: Run clang-tidy with errors as warnings
@@ -85,7 +86,7 @@ jobs:
       run: |
         cd build
         find ../src ../include ../test -type f \( -name "*.cpp" -o -name "*.hpp" \) \
-          -exec clang-tidy {} -p . -warnings-as-errors='*' -- -std=c++20 \;
+          -exec clang-tidy {} -p . -warnings-as-errors='*' -- -std=c++20 -I../include/super_modbus \;
 
   cppcheck:
     name: Static Analysis (cppcheck)
@@ -203,6 +204,7 @@ jobs:
         path: build/test-results.xml
         if-no-files-found: ignore
 
+    # Coverage includes TCP via run_tests (test_tcp_*.cpp)
     - name: Generate coverage
       run: |
         cd build
@@ -310,7 +312,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake build-essential bc
+        sudo apt-get install -y cmake build-essential bc mbpoll socat
 
     - name: Configure CMake
       run: |
@@ -327,9 +329,24 @@ jobs:
       run: |
         cd build
         # Run integration tests using gtest filter
-        ./bin/run_tests --gtest_filter="*Integration*" --gtest_output=xml:integration_results.xml || true
-        # Also run master integration tests
-        ./bin/run_tests --gtest_filter="*MasterIntegration*" || true
+        if [ -f "./test/run_tests" ]; then
+          ./test/run_tests --gtest_filter="*Integration*" --gtest_output=xml:integration_results.xml || true
+          ./test/run_tests --gtest_filter="*MasterIntegration*" || true
+        elif [ -f "./bin/run_tests" ]; then
+          ./bin/run_tests --gtest_filter="*Integration*" --gtest_output=xml:integration_results.xml || true
+          ./bin/run_tests --gtest_filter="*MasterIntegration*" || true
+        fi
+
+    - name: Run RTU E2E (mbpoll + virtual ports)
+      continue-on-error: true
+      run: |
+        cd $GITHUB_WORKSPACE
+        if [ -f scripts/test_with_mbpoll_comprehensive.sh ] && [ -f build/example_virtual_port_test -o -f build/testable_slave ]; then
+          chmod +x scripts/test_with_mbpoll_comprehensive.sh
+          ./scripts/test_with_mbpoll_comprehensive.sh || echo "RTU E2E script finished with exit code $?"
+        else
+          echo "Skipping RTU E2E: script or slave executable not found"
+        fi
 
     - name: Run end-to-end tests (comprehensive)
       run: |
@@ -337,10 +354,33 @@ jobs:
         # Run comprehensive master tests if available
         if [ -f "./bin/test_master_comprehensive" ]; then
           ./bin/test_master_comprehensive || true
+        elif [ -f "./test_master_comprehensive" ]; then
+          ./test_master_comprehensive || true
         fi
         # Run loopback example as E2E test
         if [ -f "./bin/example_loopback" ]; then
           timeout 30 ./bin/example_loopback || true
+        elif [ -f "./example_loopback" ]; then
+          timeout 30 ./example_loopback || true
+        fi
+        # TCP E2E: run testable_tcp_slave and query with mbpoll
+        TCP_SLAVE="./bin/testable_tcp_slave"
+        [ -f "./testable_tcp_slave" ] && TCP_SLAVE="./testable_tcp_slave"
+        if [ -f "$TCP_SLAVE" ] && command -v mbpoll >/dev/null 2>&1; then
+          echo "Starting TCP slave on 127.0.0.1:5502..."
+          timeout 15 "$TCP_SLAVE" 127.0.0.1 5502 1 &
+          TCP_PID=$!
+          sleep 2
+          if mbpoll -m tcp -a 1 -0 -r 0 -c 5 -1 -p 5502 127.0.0.1; then
+            echo "TCP E2E (mbpoll): OK"
+          else
+            echo "TCP E2E (mbpoll): failed"
+            kill $TCP_PID 2>/dev/null || true
+            wait $TCP_PID 2>/dev/null || true
+            exit 1
+          fi
+          kill $TCP_PID 2>/dev/null || true
+          wait $TCP_PID 2>/dev/null || true
         fi
 
   # Dynamic analysis with Valgrind
@@ -403,7 +443,7 @@ jobs:
     - name: Build examples
       run: |
         cd build
-        make -j$(nproc) example_master example_slave example_loopback testable_slave || {
+        make -j$(nproc) example_master example_slave example_loopback testable_slave testable_tcp_slave || {
           echo "Failed to build examples"
           exit 1
         }
@@ -442,6 +482,14 @@ jobs:
           echo "✓ testable_slave built (in build/)"
         else
           echo "✗ testable_slave not found"
+          exit 1
+        fi
+        if [ -f ./bin/testable_tcp_slave ]; then
+          echo "✓ testable_tcp_slave built (in bin/)"
+        elif [ -f ./testable_tcp_slave ]; then
+          echo "✓ testable_tcp_slave built (in build/)"
+        else
+          echo "✗ testable_tcp_slave not found"
           exit 1
         fi
 

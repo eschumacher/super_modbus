@@ -66,6 +66,10 @@ if (BUILD_EXAMPLES)
     add_executable(testable_slave examples/testable_slave.cpp)
     target_link_libraries(testable_slave PRIVATE ${PROJECT_NAME}-lib)
 
+    add_executable(testable_tcp_slave examples/testable_tcp_slave.cpp)
+    target_link_libraries(testable_tcp_slave PRIVATE ${PROJECT_NAME}-lib)
+    target_include_directories(testable_tcp_slave PRIVATE examples/)
+
     add_executable(example_virtual_port_test examples/example_virtual_port_test.cpp)
     target_link_libraries(example_virtual_port_test PRIVATE ${PROJECT_NAME}-lib)
     target_include_directories(example_virtual_port_test PRIVATE examples/)

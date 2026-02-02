@@ -1,4 +1,5 @@
 #include <array>
+#include <span>
 #include <gtest/gtest.h>
 #include "super_modbus/common/address_span.hpp"
 #include "super_modbus/common/byte_helpers.hpp"
@@ -92,6 +93,97 @@ TEST(TCPSlaveCoverage, Poll_InvalidFrame) {
 
   bool processed = slave.Poll(transport);
   EXPECT_FALSE(processed);
+}
+
+// Cover Read Input Registers (kReadIR) and AddInputRegisters
+TEST(TCPSlaveCoverage, ProcessReadInputRegisters) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddInputRegisters({0, 10});
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kReadIR}};
+  request.SetAddressSpan({0, 5});
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  EXPECT_EQ(response.GetData().size(), 11);  // byte_count(1) + 5 registers * 2
+}
+
+// Cover Read Discrete Inputs (kReadDI) and AddDiscreteInputs
+TEST(TCPSlaveCoverage, ProcessReadDiscreteInputs) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddDiscreteInputs({0, 16});
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kReadDI}};
+  request.SetAddressSpan({0, 8});
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  EXPECT_GT(response.GetData().size(), 0);
+}
+
+// Cover ProcessWriteMultipleRegisters success path
+TEST(TCPSlaveCoverage, ProcessWriteMultipleRegisters_Success) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddHoldingRegisters({0, 10});
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kWriteMultRegs}};
+  std::array<int16_t, 2> reg_vals{0x1234, 0x5678};
+  ASSERT_TRUE(request.SetWriteMultipleRegistersData(0, 2, reg_vals));
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  EXPECT_EQ(response.GetData().size(), 4);  // address(2) + count(2)
+}
+
+// Cover ProcessWriteMultipleCoils success path
+TEST(TCPSlaveCoverage, ProcessWriteMultipleCoils_Success) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddCoils({0, 16});
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kWriteMultCoils}};
+  const std::array<bool, 8> coils{true, false, true, false, true, false, true, false};
+  ASSERT_TRUE(request.SetWriteMultipleCoilsData(0, 8, coils));
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  EXPECT_EQ(response.GetData().size(), 4);  // address(2) + count(2)
+}
+
+// Cover ProcessMaskWriteRegister success path
+TEST(TCPSlaveCoverage, ProcessMaskWriteRegister_Success) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddHoldingRegisters({0, 10});
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kWriteSingleReg}};
+  request.SetWriteSingleRegisterData(0, 0x00FF);  // Set initial value
+  slave.Process(request);
+
+  TcpRequest mask_req{{1, kUnitId, FunctionCode::kMaskWriteReg}};
+  ASSERT_TRUE(mask_req.SetMaskWriteRegisterData(0, 0x00FF, 0x0F00));
+
+  TcpResponse response = slave.Process(mask_req);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  EXPECT_EQ(response.GetData().size(), 6);  // address(2) + and_mask(2) + or_mask(2)
+}
+
+// Cover ProcessReadWriteMultipleRegisters success response path
+TEST(TCPSlaveCoverage, ProcessReadWriteMultipleRegisters_Success) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddHoldingRegisters({0, 20});
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kReadWriteMultRegs}};
+  std::array<int16_t, 2> write_vals{0x1111, 0x2222};
+  ASSERT_TRUE(request.SetReadWriteMultipleRegistersData(0, 5, 0, 2, write_vals));
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  EXPECT_GT(response.GetData().size(), 0);  // byte_count + read values
 }
 
 // Test ProcessReadWriteMultipleRegisters error paths

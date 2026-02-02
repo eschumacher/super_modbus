@@ -265,6 +265,7 @@ make
 ./example_slave
 ./example_loopback
 ./testable_slave /dev/ttyUSB0 9600 1
+./testable_tcp_slave 127.0.0.1 5502 1   # TCP slave (test with mbpoll -m tcp ...)
 ```
 
 See the `examples/` directory for complete example code demonstrating:
@@ -272,9 +273,10 @@ See the `examples/` directory for complete example code demonstrating:
 - Slave/server usage (RTU)
 - Serial port transport implementation template
 - Complete master-slave loopback demonstration
-- Testable slave for use with Modbus Poll
+- Testable slave for use with Modbus Poll (RTU)
+- **Testable TCP slave** (`testable_tcp_slave`) for use with mbpoll or other Modbus TCP masters
 
-Note: TCP examples follow the same patterns as RTU examples - simply replace `RtuMaster`/`RtuSlave` with `TcpMaster`/`TcpSlave` and use a TCP socket transport instead of serial port transport.
+Note: TCP follows the same patterns as RTU; use `TcpMaster`/`TcpSlave` with a socket transport (see `examples/tcp_transport.hpp`).
 
 ## Testing
 
@@ -333,7 +335,7 @@ cd build
 
 ### Testing with mbpoll
 
-`mbpoll` is a command-line Modbus master tool perfect for testing your slave implementation.
+`mbpoll` is a command-line Modbus master tool that supports both **RTU** (serial) and **TCP**. It is ideal for testing your slave implementation.
 
 #### Installation
 
@@ -387,6 +389,31 @@ mbpoll -m rtu -b 9600 -P even -a 1 -0 -r 0 -t 1 /dev/pts/3 0xFF00
 - Check slave is running on the other port
 - Ensure baud rate and slave ID match
 
+#### Testing with mbpoll (TCP)
+
+`mbpoll` can act as a Modbus TCP master. Use `-m tcp` and pass the host (and optional port) instead of a serial device:
+
+```bash
+# Read 10 holding registers from TCP slave at 127.0.0.1:502 (default port)
+mbpoll -m tcp -a 1 -0 -r 0 -c 10 -1 127.0.0.1
+
+# Specify port (e.g. 5502)
+mbpoll -m tcp -a 1 -0 -r 0 -c 10 -1 -p 5502 127.0.0.1
+
+# Write value 1234 to register 0
+mbpoll -m tcp -a 1 -0 -r 0 127.0.0.1 1234
+```
+
+**Runnable TCP slave:** Build with `BUILD_EXAMPLES=ON`, then run:
+
+```bash
+./build/testable_tcp_slave 127.0.0.1 5502 1
+# In another terminal:
+mbpoll -m tcp -a 1 -0 -r 0 -c 10 -1 -p 5502 127.0.0.1
+```
+
+The comprehensive automated scripts below are **RTU-only**; there is no `test_with_mbpoll_tcp.sh` yet.
+
 ### Testing with Modbus Poll (Windows)
 
 To test with Modbus Poll or similar Windows software:
@@ -405,15 +432,27 @@ To test with Modbus Poll or similar Windows software:
 
 ### Comprehensive Test Scripts
 
-The repository includes automated test scripts:
+The repository includes automated **RTU** test scripts (virtual serial ports via socat):
 
 ```bash
-# Test slave with mbpoll
+# Test RTU slave with mbpoll
 ./scripts/test_with_mbpoll_comprehensive.sh
 
-# Test master against library's slave
+# Test RTU master against library's slave
 ./scripts/test_master_comprehensive.sh
 ```
+
+Use `./build/testable_tcp_slave [bind] [port] [unit_id]` for a runnable TCP slave, then test with mbpoll (see "Testing with mbpoll (TCP)" above). There is no automated `test_with_mbpoll_tcp.sh` script yet.
+
+### Run CI locally
+
+To run the same checks as CI (format, build, tests, E2E) locally:
+
+```bash
+./scripts/ci-local.sh
+```
+
+Options: `--no-e2e` (skip TCP E2E), `--no-rtu-e2e` (skip RTU mbpoll script), `--clang-tidy` (run clang-tidy), `--release` (also run Release build). See `./scripts/ci-local.sh --help`.
 
 ## Troubleshooting
 
@@ -453,15 +492,18 @@ sudo usermod -a -G dialout $USER
 
 ## Code Coverage
 
-The project maintains comprehensive test coverage. Coverage reports are generated automatically in CI and can be generated locally:
+The project maintains comprehensive test coverage (library `src/` typically 90%+ line coverage). Coverage reports are generated automatically in CI and can be generated locally:
 
 ```bash
-cd build
-cmake .. -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON -DCOVERAGE=ON
-make
-ctest
-# Coverage HTML report will be in build/coverage-*/
+mkdir -p build-cov && cd build-cov
+cmake .. -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON -DCOVERAGE=ON -DBUILD_EXAMPLES=ON
+make -j$(nproc)
+make coverage-run_tests
+# HTML report: build-cov/coverage-run_tests/index.html
+# Summary: lcov --list build-cov/filtered-run_tests.info
 ```
+
+When building with GCC, coverage uses GCC's `gcov` so `.gcda` data is read correctly. With Clang, the project uses the `gcov-llvm-wrapper.sh` script.
 
 ## Contributing
 

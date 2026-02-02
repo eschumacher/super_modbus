@@ -29,6 +29,12 @@ Complete example showing master-slave communication using `MemoryTransport`. Thi
 - Broadcast operations
 - FIFO queue operations
 
+### `testable_tcp_slave.cpp` and `tcp_transport.hpp`
+Runnable Modbus TCP slave that listens on a configurable address/port. Use with mbpoll or any Modbus TCP master.
+
+- **tcp_transport.hpp**: POSIX TCP socket `ByteTransport` (wraps a connected socket) and `TcpListen()` helper.
+- **testable_tcp_slave**: Same address space as the RTU testable slave (holding/input registers, coils, discrete inputs, FIFO). Usage: `./testable_tcp_slave [bind_address] [port] [unit_id]` (e.g. `./testable_tcp_slave 127.0.0.1 5502 1`). Test with: `mbpoll -m tcp -a 1 -0 -r 0 -c 10 -1 -p 5502 127.0.0.1`.
+
 ## Building the Examples
 
 To build the examples, add them to your CMakeLists.txt:
@@ -127,5 +133,6 @@ while (running) {
 - `MemoryTransport` is provided for testing only - use your own transport for real hardware
 - The library handles all Modbus protocol details (frame encoding, CRC, timeouts, etc.)
 - You only need to implement the `ByteTransport` interface for your I/O mechanism
-- All function codes (FC 1-24) are supported
-- Broadcast support (slave ID 0) is implemented for write operations
+- All function codes (FC 1-24) are supported for both RTU and TCP
+- Broadcast support (slave ID 0) is implemented for write operations (RTU)
+- **TCP**: Use `TcpMaster`/`TcpSlave` and `TcpFrame` with a socket-based transport. A runnable TCP slave and POSIX socket transport are provided: `testable_tcp_slave` and `tcp_transport.hpp`.

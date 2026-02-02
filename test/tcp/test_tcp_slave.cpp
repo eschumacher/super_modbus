@@ -119,6 +119,57 @@ TEST(TCPSlave, ProcessIncomingFrameWrongUnitId) {
   EXPECT_FALSE(processed);  // Should not process request for wrong unit ID
 }
 
+// Broadcast (unit ID 0): write operations are accepted and processed, but no response is sent
+TEST(TCPSlave, ProcessIncomingFrame_BroadcastWrite_AcceptedNoResponse) {
+  static constexpr uint8_t kSlaveId{1};
+  static constexpr uint8_t kBroadcastUnitId{0};
+  MemoryTransport transport;
+  TcpSlave slave{kSlaveId};
+  slave.AddHoldingRegisters({0, 10});
+
+  TcpRequest request{{1, kBroadcastUnitId, FunctionCode::kWriteSingleReg}};
+  request.SetWriteSingleRegisterData(0, 0x1234);
+
+  auto frame = TcpFrame::EncodeRequest(request);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  bool processed = slave.ProcessIncomingFrame(transport, 100);
+  EXPECT_TRUE(processed);
+
+  // Broadcast: no response sent (Modbus spec)
+  auto written = transport.GetWrittenData();
+  EXPECT_TRUE(written.empty());
+
+  // Verify register was written by reading via normal request
+  TcpRequest read_req{{2, kSlaveId, FunctionCode::kReadHR}};
+  read_req.SetAddressSpan({0, 1});
+  TcpResponse read_resp = slave.Process(read_req);
+  EXPECT_EQ(read_resp.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  ASSERT_GE(read_resp.GetData().size(), 3);  // byte_count + 2 bytes
+  EXPECT_EQ(read_resp.GetData()[1], 0x12);
+  EXPECT_EQ(read_resp.GetData()[2], 0x34);
+}
+
+// Broadcast (unit ID 0): read operations are rejected
+TEST(TCPSlave, ProcessIncomingFrame_BroadcastRead_Rejected) {
+  static constexpr uint8_t kSlaveId{1};
+  static constexpr uint8_t kBroadcastUnitId{0};
+  MemoryTransport transport;
+  TcpSlave slave{kSlaveId};
+  slave.AddHoldingRegisters({0, 10});
+
+  TcpRequest request{{1, kBroadcastUnitId, FunctionCode::kReadHR}};
+  request.SetAddressSpan({0, 5});
+
+  auto frame = TcpFrame::EncodeRequest(request);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  bool processed = slave.ProcessIncomingFrame(transport, 100);
+  EXPECT_FALSE(processed);
+}
+
 TEST(TCPSlave, Poll) {
   static constexpr uint8_t kUnitId{1};
   MemoryTransport transport;

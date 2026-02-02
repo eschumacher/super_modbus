@@ -714,6 +714,96 @@ TEST(TCPSlaveCoverage, ProcessReadRegisters_AddressOutOfBounds) {
   EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kIllegalDataAddress);
 }
 
+// Test ProcessReadRegisters with partial range (first valid, second invalid) - exception_hit path
+TEST(TCPSlaveCoverage, ProcessReadRegisters_PartialRangeException) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddHoldingRegisters({0, 2});  // Only addresses 0-1
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kReadHR}};
+  request.SetAddressSpan({0, 3});  // Addresses 0, 1 valid; 2 out of bounds
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kIllegalDataAddress);
+}
+
+// ProcessReadRegisters with request that has insufficient data so GetAddressSpan() returns null (assert path)
+TEST(TCPSlaveCoverage, ProcessReadRegisters_GetAddressSpanReturnsNull) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddHoldingRegisters({0, 5});
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kReadHR}};
+  request.SetRawData({0x00, 0x01});  // Only 2 bytes; GetAddressSpan() requires 4
+
+  EXPECT_DEATH(slave.Process(request), ".*");
+}
+
+// ProcessReadCoils with one address out of bounds (break path in loop)
+TEST(TCPSlaveCoverage, ProcessReadCoils_OneAddressOutOfBounds) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddCoils({0, 5});  // Only addresses 0-4
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kReadCoils}};
+  request.SetAddressSpan({3, 3});  // Addresses 3, 4 valid; 5 out of bounds
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kIllegalDataAddress);
+}
+
+// Test ProcessReadCoils with exactly 8 coils (bit_position == kCoilsPerByte branch)
+TEST(TCPSlaveCoverage, ProcessReadCoils_ExactlyEightCoils) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddCoils({0, 8});
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kReadCoils}};
+  request.SetAddressSpan({0, 8});
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kAcknowledge);
+  EXPECT_EQ(response.GetData().size(), 2);  // byte_count(1) + 1 data byte
+}
+
+// ProcessReadCoils with request that has insufficient data so GetAddressSpan() returns null (assert path)
+TEST(TCPSlaveCoverage, ProcessReadCoils_GetAddressSpanReturnsNull) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddCoils({0, 5});
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kReadCoils}};
+  request.SetRawData({0x00, 0x01});  // Only 2 bytes; GetAddressSpan() requires 4
+
+  EXPECT_DEATH(slave.Process(request), ".*");
+}
+
+// Test ProcessWriteSingleRegister when address not in map
+TEST(TCPSlaveCoverage, ProcessWriteSingleRegister_AddressNotInMap) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddHoldingRegisters({0, 5});  // Only 0-4
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kWriteSingleReg}};
+  request.SetWriteSingleRegisterData(10, 1234);  // Address 10 not in map
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kIllegalDataAddress);
+}
+
+// Test ProcessWriteSingleCoil when address not in map
+TEST(TCPSlaveCoverage, ProcessWriteSingleCoil_AddressNotInMap) {
+  static constexpr uint8_t kUnitId{1};
+  TcpSlave slave{kUnitId};
+  slave.AddCoils({0, 5});  // Only 0-4
+
+  TcpRequest request{{1, kUnitId, FunctionCode::kWriteSingleCoil}};
+  request.SetWriteSingleCoilData(10, true);  // Address 10 not in map
+
+  TcpResponse response = slave.Process(request);
+  EXPECT_EQ(response.GetExceptionCode(), ExceptionCode::kIllegalDataAddress);
+}
+
 // Test ProcessReadCoils with address out of bounds
 TEST(TCPSlaveCoverage, ProcessReadCoils_AddressOutOfBounds) {
   static constexpr uint8_t kUnitId{1};

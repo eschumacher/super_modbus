@@ -1,4 +1,5 @@
 #include <array>
+#include <climits>
 #include <gtest/gtest.h>
 #include "super_modbus/common/address_span.hpp"
 #include "super_modbus/common/byte_helpers.hpp"
@@ -89,6 +90,16 @@ TEST(TCPRequestEdgeCases, SetDiagnosticsDataInvalidFunction) {
   EXPECT_DEATH(request.SetDiagnosticsData(0x0001, data), ".*");
 }
 
+// Covers overflow check: total_size = 2 + data.size() must not exceed SIZE_MAX
+TEST(TCPRequestEdgeCases, SetDiagnosticsData_DataSizeOverflow) {
+  TcpRequest request{{0, 1, FunctionCode::kDiagnostics}};
+  // Span with size > SIZE_MAX - 2 triggers the overflow guard (no allocation attempted)
+  constexpr size_t kOverflowSize = static_cast<size_t>(SIZE_MAX - 1);
+  std::span<const uint8_t> overflow_span(static_cast<const uint8_t *>(nullptr), kOverflowSize);
+  bool result = request.SetDiagnosticsData(0x0000, overflow_span);
+  EXPECT_FALSE(result);
+}
+
 TEST(TCPRequestEdgeCases, SetMaskWriteRegisterDataInvalidFunction) {
   TcpRequest request{{0, 1, FunctionCode::kReadHR}};
 
@@ -146,6 +157,19 @@ TEST(TCPRequestEdgeCases, SetReadFileRecordDataTooMany) {
 
   bool result = request.SetReadFileRecordData(file_records);
   EXPECT_FALSE(result);  // Too many file records should fail
+}
+
+// Boundary: exactly 255 records (max allowed) should succeed
+TEST(TCPRequestEdgeCases, SetReadFileRecordData_ExactlyMaxRecords) {
+  TcpRequest request{{0, 1, FunctionCode::kReadFileRecord}};
+  std::vector<std::tuple<uint16_t, uint16_t, uint16_t>> file_records;
+  for (int i = 0; i < 255; ++i) {
+    file_records.emplace_back(1, i, 1);
+  }
+
+  bool result = request.SetReadFileRecordData(file_records);
+  EXPECT_TRUE(result);
+  EXPECT_EQ(request.GetData().size(), 1 + 255 * 7);  // byte_count(1) + 255 * 7
 }
 
 TEST(TCPRequestEdgeCases, SetWriteFileRecordDataInvalidFunction) {

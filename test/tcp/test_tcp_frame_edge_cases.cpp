@@ -218,9 +218,23 @@ TEST(TCPFrameEdgeCases, DecodeResponseExceptionWithInsufficientData) {
   // Missing exception code
 
   auto decoded = TcpFrame::DecodeResponse(frame);
-  // Should still decode, but exception code might be invalid
-  // Actually, length says 2, so we have Unit ID + Function Code, but exception needs 3
-  // So it should fail the length check
+  // length < 3 for exception response -> invalid
+  EXPECT_FALSE(decoded.has_value());
+}
+
+// Exception response with length=3 but frame too short (frame.size() < pdu_start + 2)
+TEST(TCPFrameEdgeCases, DecodeResponseExceptionFrameTooShort) {
+  std::vector<uint8_t> frame;
+  frame.push_back(0x00);
+  frame.push_back(0x01);
+  frame.push_back(0x00);
+  frame.push_back(0x00);
+  frame.push_back(0x00);
+  frame.push_back(0x03);  // Length = 3 (Unit ID + FC + Exception code)
+  frame.push_back(0x01);  // Unit ID
+  // Only 7 bytes - missing function code and exception code (need 9 total)
+  // frame.size()=7 < 6+length=9, so we fail at frame.size() < 6+length
+  auto decoded = TcpFrame::DecodeResponse(frame);
   EXPECT_FALSE(decoded.has_value());
 }
 
@@ -405,6 +419,16 @@ TEST(TCPFrameEdgeCases, GetMinFrameSizeAllFunctionCodes) {
   EXPECT_EQ(TcpFrame::GetMinFrameSize(FunctionCode::kDiagnostics), 8);
   EXPECT_EQ(TcpFrame::GetMinFrameSize(FunctionCode::kGetComEventCounter), 8);
   EXPECT_EQ(TcpFrame::GetMinFrameSize(FunctionCode::kReportSlaveID), 8);
+}
+
+// Default case: function codes not in switch return kMinFrameSize (8)
+TEST(TCPFrameEdgeCases, GetMinFrameSizeDefaultCase) {
+  EXPECT_EQ(TcpFrame::GetMinFrameSize(FunctionCode::kReadFileRecord), 8);
+  EXPECT_EQ(TcpFrame::GetMinFrameSize(FunctionCode::kWriteFileRecord), 8);
+  EXPECT_EQ(TcpFrame::GetMinFrameSize(FunctionCode::kReadFIFOQueue), 8);
+  EXPECT_EQ(TcpFrame::GetMinFrameSize(FunctionCode::kReadWriteMultRegs), 8);
+  EXPECT_EQ(TcpFrame::GetMinFrameSize(FunctionCode::kWriteMultRegs), 8);
+  EXPECT_EQ(TcpFrame::GetMinFrameSize(FunctionCode::kWriteMultCoils), 8);
 }
 
 TEST(TCPFrameEdgeCases, IsResponseFrameComplete) {

@@ -385,6 +385,123 @@ TEST(TCPMasterCoverage, GetComEventCounter_InsufficientData) {
   EXPECT_FALSE(result.has_value());
 }
 
+// Test GetComEventCounter with status busy (0xFFFF -> status_byte 0xFF)
+TEST(TCPMasterCoverage, GetComEventCounter_StatusBusy) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kGetComEventCounter};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  response.EmplaceBack(0xFF);  // Status high byte (busy)
+  response.EmplaceBack(0xFF);  // Status low byte
+  response.EmplaceBack(0x00);  // Event count high
+  response.EmplaceBack(0x05);  // Event count low
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  auto result = master.GetComEventCounter(kUnitId);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->first, 0xFF);  // Status byte (busy)
+  EXPECT_EQ(result->second, 5);    // Event count
+}
+
+// Test ReadFileRecord with empty response data
+TEST(TCPMasterCoverage, ReadFileRecord_EmptyResponseData) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kReadFileRecord};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  // No data - GetData() empty
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  std::vector<std::tuple<uint16_t, uint16_t, uint16_t>> records;
+  records.emplace_back(1, 0, 1);
+  auto result = master.ReadFileRecord(kUnitId, records);
+  EXPECT_FALSE(result.has_value());
+}
+
+// Test WriteMultipleRegisters with no response (timeout)
+TEST(TCPMasterCoverage, WriteMultipleRegisters_NoResponse) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport(0);
+  TcpMaster master{transport};
+
+  std::vector<int16_t> values{100, 200};
+  bool result = master.WriteMultipleRegisters(kUnitId, 0, values);
+  EXPECT_FALSE(result);
+}
+
+// Test WriteMultipleCoils with no response (timeout)
+TEST(TCPMasterCoverage, WriteMultipleCoils_NoResponse) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport(0);
+  TcpMaster master{transport};
+
+  std::array<bool, 4> values{true, false, true, false};
+  bool result = master.WriteMultipleCoils(kUnitId, 0, std::span<const bool>(values));
+  EXPECT_FALSE(result);
+}
+
+// Test MaskWriteRegister with no response (timeout)
+TEST(TCPMasterCoverage, MaskWriteRegister_NoResponse) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport(0);
+  TcpMaster master{transport};
+
+  bool result = master.MaskWriteRegister(kUnitId, 0, 0xFF00, 0x00FF);
+  EXPECT_FALSE(result);
+}
+
+// Test ReadWriteMultipleRegisters with no response (timeout)
+TEST(TCPMasterCoverage, ReadWriteMultipleRegisters_NoResponse) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport(0);
+  TcpMaster master{transport};
+
+  std::vector<int16_t> write_values{100, 200};
+  auto result = master.ReadWriteMultipleRegisters(kUnitId, 0, 2, 10, write_values);
+  EXPECT_FALSE(result.has_value());
+}
+
+// Test Diagnostics with no response (timeout)
+TEST(TCPMasterCoverage, Diagnostics_NoResponse) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport(0);
+  TcpMaster master{transport};
+
+  std::vector<uint8_t> data{0x00, 0x01};
+  auto result = master.Diagnostics(kUnitId, 0x0001, data);
+  EXPECT_FALSE(result.has_value());
+}
+
+// Test ReportSlaveID with no response (timeout)
+TEST(TCPMasterCoverage, ReportSlaveID_NoResponse) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport(0);
+  TcpMaster master{transport};
+
+  auto result = master.ReportSlaveID(kUnitId);
+  EXPECT_FALSE(result.has_value());
+}
+
+// Test GetComEventLog with no response (timeout)
+TEST(TCPMasterCoverage, GetComEventLog_NoResponse) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport(0);
+  TcpMaster master{transport};
+
+  auto result = master.GetComEventLog(kUnitId);
+  EXPECT_FALSE(result.has_value());
+}
+
 // Test GetComEventLog with exception response
 TEST(TCPMasterCoverage, GetComEventLog_ExceptionResponse) {
   static constexpr uint8_t kUnitId{1};
@@ -1372,5 +1489,43 @@ TEST(TCPMasterCoverage, ReadDiscreteInputs_WrongByteCount) {
   transport.ResetReadPosition();
 
   auto result = master.ReadDiscreteInputs(kUnitId, 0, 5);
+  EXPECT_FALSE(result.has_value());
+}
+
+// ReadCoils with correct byte_count but data buffer too short (in-loop bounds check)
+TEST(TCPMasterCoverage, ReadCoils_DataBufferTooShortInLoop) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kReadCoils};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  response.EmplaceBack(2);     // byte_count=2 for 16 coils
+  response.EmplaceBack(0x00);  // Only 2 bytes total; when i=8, byte_index=1, 1+1>=2 triggers return {}
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  auto result = master.ReadCoils(kUnitId, 0, 16);
+  EXPECT_FALSE(result.has_value());
+}
+
+// ReadDiscreteInputs with correct byte_count but data buffer too short (in-loop bounds check)
+TEST(TCPMasterCoverage, ReadDiscreteInputs_DataBufferTooShortInLoop) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kReadDI};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  response.EmplaceBack(2);
+  response.EmplaceBack(0x00);
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  auto result = master.ReadDiscreteInputs(kUnitId, 0, 16);
   EXPECT_FALSE(result.has_value());
 }

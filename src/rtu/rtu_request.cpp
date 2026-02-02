@@ -36,11 +36,11 @@ std::optional<AddressSpan> RtuRequest::GetAddressSpan() const {
     return {};
   }
 
-  // Modbus uses big-endian (high byte first, low byte second)
   AddressSpan address_span;
-  address_span.start_address =
-      MakeInt16(data_[kAddressSpanStartAddressIndex + 1], data_[kAddressSpanStartAddressIndex]);
-  address_span.reg_count = MakeInt16(data_[kAddressSpanRegCountIndex + 1], data_[kAddressSpanRegCountIndex]);
+  address_span.start_address = static_cast<uint16_t>(
+      DecodeU16(data_[kAddressSpanStartAddressIndex], data_[kAddressSpanStartAddressIndex + 1], byte_order_));
+  address_span.reg_count = static_cast<uint16_t>(
+      DecodeU16(data_[kAddressSpanRegCountIndex], data_[kAddressSpanRegCountIndex + 1], byte_order_));
   return address_span;
 }
 
@@ -52,10 +52,13 @@ bool RtuRequest::SetAddressSpan(AddressSpan address_span) {
   }
 
   data_.clear();
-  data_.emplace_back(GetHighByte(address_span.start_address));
-  data_.emplace_back(GetLowByte(address_span.start_address));
-  data_.emplace_back(GetHighByte(address_span.reg_count));
-  data_.emplace_back(GetLowByte(address_span.reg_count));
+  uint8_t buf[2];
+  EncodeU16(address_span.start_address, byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
+  EncodeU16(address_span.reg_count, byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
   return true;
 }
 
@@ -67,10 +70,13 @@ bool RtuRequest::SetWriteSingleRegisterData(uint16_t register_address, int16_t r
   }
 
   data_.clear();
-  data_.emplace_back(GetHighByte(register_address));
-  data_.emplace_back(GetLowByte(register_address));
-  data_.emplace_back(GetHighByte(register_value));
-  data_.emplace_back(GetLowByte(register_value));
+  uint8_t buf[2];
+  EncodeU16(register_address, byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
+  EncodeU16(static_cast<uint16_t>(register_value), byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
   return true;
 }
 
@@ -82,12 +88,15 @@ bool RtuRequest::SetWriteSingleCoilData(uint16_t coil_address, bool coil_value) 
   }
 
   data_.clear();
-  data_.emplace_back(GetHighByte(coil_address));
-  data_.emplace_back(GetLowByte(coil_address));
+  uint8_t buf[2];
+  EncodeU16(coil_address, byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
   // Modbus spec: 0x0000 = OFF, 0xFF00 = ON
   uint16_t value = coil_value ? kCoilOnValue : 0x0000;
-  data_.emplace_back(GetHighByte(value));
-  data_.emplace_back(GetLowByte(value));
+  EncodeU16(value, byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
   return true;
 }
 
@@ -104,18 +113,18 @@ bool RtuRequest::SetWriteMultipleRegistersData(uint16_t start_address, uint16_t 
   }
 
   data_.clear();
-  // Address
-  data_.emplace_back(GetHighByte(start_address));
-  data_.emplace_back(GetLowByte(start_address));
-  // Count
-  data_.emplace_back(GetHighByte(count));
-  data_.emplace_back(GetLowByte(count));
-  // Byte count
+  uint8_t buf[2];
+  EncodeU16(start_address, byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
+  EncodeU16(count, byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
   data_.emplace_back(static_cast<uint8_t>(count * 2));
-  // Modbus RTU uses big-endian: high byte first, then low byte
   for (int16_t value : values) {
-    data_.emplace_back(GetHighByte(value));
-    data_.emplace_back(GetLowByte(value));
+    EncodeU16(static_cast<uint16_t>(value), byte_order_, buf);
+    data_.emplace_back(buf[0]);
+    data_.emplace_back(buf[1]);
   }
   return true;
 }
@@ -132,12 +141,13 @@ bool RtuRequest::SetWriteMultipleCoilsData(uint16_t start_address, uint16_t coun
   }
 
   data_.clear();
-  // Address
-  data_.emplace_back(GetHighByte(start_address));
-  data_.emplace_back(GetLowByte(start_address));
-  // Count
-  data_.emplace_back(GetHighByte(count));
-  data_.emplace_back(GetLowByte(count));
+  uint8_t buf[2];
+  EncodeU16(start_address, byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
+  EncodeU16(count, byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
   // Byte count (8 coils per byte, rounded up)
   auto byte_count = static_cast<uint8_t>((count + supermb::kCoilByteCountRoundingOffset) / supermb::kCoilsPerByte);
   data_.emplace_back(byte_count);
@@ -166,8 +176,10 @@ bool RtuRequest::SetDiagnosticsData(uint16_t sub_function_code, std::span<const 
   }
 
   data_.clear();
-  data_.emplace_back(GetHighByte(sub_function_code));
-  data_.emplace_back(GetLowByte(sub_function_code));
+  uint8_t buf[2];
+  EncodeU16(sub_function_code, byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
   data_.insert(data_.end(), data.begin(), data.end());
   return true;
 }
@@ -180,12 +192,16 @@ bool RtuRequest::SetMaskWriteRegisterData(uint16_t address, uint16_t and_mask, u
   }
 
   data_.clear();
-  data_.emplace_back(GetHighByte(address));
-  data_.emplace_back(GetLowByte(address));
-  data_.emplace_back(GetHighByte(and_mask));
-  data_.emplace_back(GetLowByte(and_mask));
-  data_.emplace_back(GetHighByte(or_mask));
-  data_.emplace_back(GetLowByte(or_mask));
+  uint8_t buf[2];
+  EncodeU16(address, byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
+  EncodeU16(and_mask, byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
+  EncodeU16(or_mask, byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
   return true;
 }
 
@@ -202,22 +218,24 @@ bool RtuRequest::SetReadWriteMultipleRegistersData(uint16_t read_start, uint16_t
   }
 
   data_.clear();
-  // Read parameters
-  data_.emplace_back(GetHighByte(read_start));
-  data_.emplace_back(GetLowByte(read_start));
-  data_.emplace_back(GetHighByte(read_count));
-  data_.emplace_back(GetLowByte(read_count));
-  // Write parameters
-  data_.emplace_back(GetHighByte(write_start));
-  data_.emplace_back(GetLowByte(write_start));
-  data_.emplace_back(GetHighByte(write_count));
-  data_.emplace_back(GetLowByte(write_count));
-  // Byte count
+  uint8_t buf[2];
+  EncodeU16(read_start, byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
+  EncodeU16(read_count, byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
+  EncodeU16(write_start, byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
+  EncodeU16(write_count, byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
   data_.emplace_back(static_cast<uint8_t>(write_count * 2));
-  // Modbus RTU uses big-endian: high byte first, then low byte
   for (int16_t value : write_values) {
-    data_.emplace_back(GetHighByte(value));
-    data_.emplace_back(GetLowByte(value));
+    EncodeU16(static_cast<uint16_t>(value), byte_order_, buf);
+    data_.emplace_back(buf[0]);
+    data_.emplace_back(buf[1]);
   }
   return true;
 }
@@ -230,8 +248,10 @@ bool RtuRequest::SetReadFIFOQueueData(uint16_t fifo_address) {
   }
 
   data_.clear();
-  data_.emplace_back(GetHighByte(fifo_address));
-  data_.emplace_back(GetLowByte(fifo_address));
+  uint8_t buf[2];
+  EncodeU16(fifo_address, byte_order_, buf);
+  data_.emplace_back(buf[0]);
+  data_.emplace_back(buf[1]);
   return true;
 }
 
@@ -251,16 +271,17 @@ bool RtuRequest::SetReadFileRecordData(std::span<const std::tuple<uint16_t, uint
   auto byte_count = static_cast<uint8_t>(file_records.size() * supermb::kFileRecordBytesPerRecord);
   data_.emplace_back(byte_count);
 
-  // Encode each record: file_number (high, low) + record_number (high, low) + record_length (high, low)
-  // Slave expects: MakeInt16(data[offset+1], data[offset]) = MakeInt16(low, high) where data[offset]=high,
-  // data[offset+1]=low
+  uint8_t buf[2];
   for (const auto &[file_number, record_number, record_length] : file_records) {
-    data_.emplace_back(GetHighByte(file_number));
-    data_.emplace_back(GetLowByte(file_number));
-    data_.emplace_back(GetHighByte(record_number));
-    data_.emplace_back(GetLowByte(record_number));
-    data_.emplace_back(GetHighByte(record_length));
-    data_.emplace_back(GetLowByte(record_length));
+    EncodeU16(file_number, byte_order_, buf);
+    data_.emplace_back(buf[0]);
+    data_.emplace_back(buf[1]);
+    EncodeU16(record_number, byte_order_, buf);
+    data_.emplace_back(buf[0]);
+    data_.emplace_back(buf[1]);
+    EncodeU16(record_length, byte_order_, buf);
+    data_.emplace_back(buf[0]);
+    data_.emplace_back(buf[1]);
   }
 
   return true;
@@ -280,24 +301,23 @@ bool RtuRequest::SetWriteFileRecordData(
 
   data_.clear();
 
-  // First, build the data without byte_count to calculate it
+  uint8_t buf[2];
   std::vector<uint8_t> temp_data;
   for (const auto &[file_number, record_number, record_data] : file_records) {
-    // Reference type (0x06 for file record)
     temp_data.emplace_back(supermb::kFileRecordReferenceType);
-    // File number (high byte, low byte)
-    temp_data.emplace_back(GetHighByte(file_number));
-    temp_data.emplace_back(GetLowByte(file_number));
-    // Record number (high byte, low byte)
-    temp_data.emplace_back(GetHighByte(record_number));
-    temp_data.emplace_back(GetLowByte(record_number));
-    // Record length (high byte, low byte)
-    temp_data.emplace_back(GetHighByte(static_cast<uint16_t>(record_data.size())));
-    temp_data.emplace_back(GetLowByte(static_cast<uint16_t>(record_data.size())));
-    // Modbus RTU uses big-endian: high byte first, then low byte
+    EncodeU16(file_number, byte_order_, buf);
+    temp_data.emplace_back(buf[0]);
+    temp_data.emplace_back(buf[1]);
+    EncodeU16(record_number, byte_order_, buf);
+    temp_data.emplace_back(buf[0]);
+    temp_data.emplace_back(buf[1]);
+    EncodeU16(static_cast<uint16_t>(record_data.size()), byte_order_, buf);
+    temp_data.emplace_back(buf[0]);
+    temp_data.emplace_back(buf[1]);
     for (int16_t value : record_data) {
-      temp_data.emplace_back(GetHighByte(value));
-      temp_data.emplace_back(GetLowByte(value));
+      EncodeU16(static_cast<uint16_t>(value), byte_order_, buf);
+      temp_data.emplace_back(buf[0]);
+      temp_data.emplace_back(buf[1]);
     }
   }
 

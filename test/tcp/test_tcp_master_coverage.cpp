@@ -6,6 +6,7 @@
 #include "super_modbus/common/byte_helpers.hpp"
 #include "super_modbus/common/exception_code.hpp"
 #include "super_modbus/common/function_code.hpp"
+#include "super_modbus/common/wire_format_options.hpp"
 #include "super_modbus/tcp/tcp_frame.hpp"
 #include "super_modbus/tcp/tcp_master.hpp"
 #include "super_modbus/tcp/tcp_request.hpp"
@@ -23,6 +24,7 @@ using supermb::TcpFrame;
 using supermb::TcpMaster;
 using supermb::TcpRequest;
 using supermb::TcpResponse;
+using supermb::WireFormatOptions;
 
 // Mock transport that can simulate write failures
 class FailingTransport : public supermb::ByteTransport {
@@ -1557,4 +1559,92 @@ TEST(TCPMasterCoverage, ReadDiscreteInputs_DataBufferTooShortInLoop) {
 
   auto result = master.ReadDiscreteInputs(kUnitId, 0, 16);
   EXPECT_FALSE(result.has_value());
+}
+
+// ReadFloats / WriteFloats (Enron-style 32-bit float API)
+TEST(TCPMasterCoverage, ReadFloats_Success) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kReadHR};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  response.EmplaceBack(8);
+  response.EmplaceBack(0x3F);
+  response.EmplaceBack(0x80);
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x40);
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x00);
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  auto result = master.ReadFloats(kUnitId, 0, 2);
+  ASSERT_TRUE(result.has_value());
+  ASSERT_EQ(result->size(), 2);
+  EXPECT_FLOAT_EQ((*result)[0], 1.0f);
+  EXPECT_FLOAT_EQ((*result)[1], 2.0f);
+}
+
+TEST(TCPMasterCoverage, ReadFloats_NoResponse) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+  auto result = master.ReadFloats(kUnitId, 0, 2);
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST(TCPMasterCoverage, WriteFloats_Success) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+
+  TcpResponse response{1, kUnitId, FunctionCode::kWriteMultRegs};
+  response.SetExceptionCode(ExceptionCode::kAcknowledge);
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x00);
+  response.EmplaceBack(0x04);
+
+  auto frame = TcpFrame::EncodeResponse(response);
+  transport.SetReadData(frame);
+  transport.ResetReadPosition();
+
+  std::vector<float> values{1.0f, 2.0f};
+  bool ok = master.WriteFloats(kUnitId, 0, values);
+  EXPECT_TRUE(ok);
+}
+
+TEST(TCPMasterCoverage, WriteFloats_Empty) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  TcpMaster master{transport};
+  std::vector<float> values;
+  bool ok = master.WriteFloats(kUnitId, 0, values);
+  EXPECT_TRUE(ok);
+}
+
+TEST(TCPMasterCoverage, ReadFloats_FloatRangeOutOfRange) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  WireFormatOptions opts;
+  opts.float_range = {10, 10};
+  TcpMaster master{transport, opts};
+  auto result = master.ReadFloats(kUnitId, 0, 2);
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST(TCPMasterCoverage, WriteFloats_FloatRangeOutOfRange) {
+  static constexpr uint8_t kUnitId{1};
+  MemoryTransport transport;
+  WireFormatOptions opts;
+  opts.float_range = {10, 10};
+  TcpMaster master{transport, opts};
+  std::vector<float> values{1.0f};
+  bool ok = master.WriteFloats(kUnitId, 0, values);
+  EXPECT_FALSE(ok);
 }

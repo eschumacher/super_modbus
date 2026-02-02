@@ -6,6 +6,7 @@
 #include <vector>
 #include "../common/exception_code.hpp"
 #include "../common/function_code.hpp"
+#include "../common/wire_format_options.hpp"
 #include "tcp_request.hpp"
 #include "tcp_response.hpp"
 
@@ -41,9 +42,11 @@ class TcpFrame {
   /**
    * @brief Decode a TCP frame into a request
    * @param frame Complete TCP frame including MBAP header
+   * @param byte_order Byte order used for 16-bit values in PDU (default: BigEndian)
    * @return Parsed request if frame is valid, empty optional otherwise
    */
-  [[nodiscard]] static std::optional<TcpRequest> DecodeRequest(std::span<const uint8_t> frame);
+  [[nodiscard]] static std::optional<TcpRequest> DecodeRequest(std::span<const uint8_t> frame,
+                                                               ByteOrder byte_order = ByteOrder::BigEndian);
 
   /**
    * @brief Decode a TCP frame into a response

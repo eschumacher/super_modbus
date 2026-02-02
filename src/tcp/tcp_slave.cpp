@@ -66,11 +66,11 @@ TcpResponse TcpSlave::Process(const TcpRequest &request) {
   TcpResponse response{request.GetTransactionId(), request.GetUnitId(), request.GetFunctionCode()};
   switch (request.GetFunctionCode()) {
     case FunctionCode::kReadHR: {
-      ProcessReadRegisters(holding_registers_, request, response);
+      ProcessReadRegisters(holding_registers_, request, response, true);
       break;
     }
     case FunctionCode::kReadIR: {
-      ProcessReadRegisters(input_registers_, request, response);
+      ProcessReadRegisters(input_registers_, request, response, false);
       break;
     }
     case FunctionCode::kReadCoils: {
@@ -162,8 +162,24 @@ void TcpSlave::AddDiscreteInputs(AddressSpan span) {
   discrete_inputs_.AddAddressSpan(span);
 }
 
+void TcpSlave::AddFloatRange(uint16_t start_register, uint16_t register_count) {
+  if (register_count == 0 || (register_count % 2) != 0) {
+    return;
+  }
+  float_range_ = {start_register, register_count};
+  float_storage_.resize(register_count / 2, 0.0f);
+}
+
+bool TcpSlave::SetFloat(size_t float_index, float value) {
+  if (float_index >= float_storage_.size()) {
+    return false;
+  }
+  float_storage_[float_index] = value;
+  return true;
+}
+
 void TcpSlave::ProcessReadRegisters(const AddressMap<int16_t> &address_map, const TcpRequest &request,
-                                    TcpResponse &response) {
+                                    TcpResponse &response, bool for_holding_registers) {
   bool exception_hit = false;
   const auto maybe_address_span = request.GetAddressSpan();
   if (!maybe_address_span.has_value()) {
@@ -174,16 +190,40 @@ void TcpSlave::ProcessReadRegisters(const AddressMap<int16_t> &address_map, cons
   }
 
   const AddressSpan &address_span = maybe_address_span.value();
-  // Calculate byte count (2 bytes per register)
+
+  if (for_holding_registers && float_range_.has_value() && (address_span.reg_count % 2) == 0) {
+    const auto [range_start, range_count] = *float_range_;
+    if (address_span.start_address >= range_start &&
+        address_span.start_address + address_span.reg_count <= range_start + range_count) {
+      const size_t float_index_start = (address_span.start_address - range_start) / 2;
+      const size_t num_floats = address_span.reg_count / 2;
+      if (float_index_start + num_floats <= float_storage_.size()) {
+        auto byte_count = static_cast<uint8_t>(address_span.reg_count * 2);
+        response.EmplaceBack(byte_count);
+        uint8_t buf[4];
+        for (size_t i = 0; i < num_floats; ++i) {
+          EncodeFloat(float_storage_[float_index_start + i], options_.byte_order, options_.word_order, buf);
+          response.EmplaceBack(buf[0]);
+          response.EmplaceBack(buf[1]);
+          response.EmplaceBack(buf[2]);
+          response.EmplaceBack(buf[3]);
+        }
+        response.SetExceptionCode(ExceptionCode::kAcknowledge);
+        return;
+      }
+    }
+  }
+
   auto byte_count = static_cast<uint8_t>(address_span.reg_count * 2);
   response.EmplaceBack(byte_count);
 
+  uint8_t buf[2];
   for (int i = 0; i < address_span.reg_count; ++i) {
     const auto reg_value = address_map[address_span.start_address + i];
     if (reg_value.has_value()) {
-      // Modbus RTU uses big-endian: high byte first, then low byte
-      response.EmplaceBack(GetHighByte(reg_value.value()));
-      response.EmplaceBack(GetLowByte(reg_value.value()));
+      EncodeU16(static_cast<uint16_t>(reg_value.value()), options_.byte_order, buf);
+      response.EmplaceBack(buf[0]);
+      response.EmplaceBack(buf[1]);
     } else {
       response.SetExceptionCode(ExceptionCode::kIllegalDataAddress);
       exception_hit = true;
@@ -202,19 +242,25 @@ void TcpSlave::ProcessWriteSingleRegister(AddressMap<int16_t> &address_map, cons
     return;
   }
 
-  // SetWriteSingleRegisterData writes: [high_addr, low_addr, high_val, low_val]
-  // Modbus uses low-byte-first, so we need to read as MakeInt16(low_byte, high_byte)
-  // For [high, low] in data, we need MakeInt16(data[1], data[0])
-  const uint16_t address = MakeInt16(request.GetData()[1], request.GetData()[0]);
-  int16_t new_value = MakeInt16(request.GetData()[3], request.GetData()[2]);
+  const auto &data = request.GetData();
+  const uint16_t address = static_cast<uint16_t>(DecodeU16(data[0], data[1], options_.byte_order));
+  if (float_range_.has_value()) {
+    const auto [range_start, range_count] = *float_range_;
+    if (address >= range_start && address < range_start + range_count) {
+      response.SetExceptionCode(ExceptionCode::kIllegalDataAddress);
+      return;
+    }
+  }
+  int16_t new_value = static_cast<int16_t>(DecodeU16(data[2], data[3], options_.byte_order));
   if (address_map[address].has_value()) {
     address_map.Set(address, new_value);
-    // WriteSingleReg response should echo back address and value (Modbus spec)
-    // Match request format: [high_addr, low_addr, high_val, low_val]
-    response.EmplaceBack(GetHighByte(address));
-    response.EmplaceBack(GetLowByte(address));
-    response.EmplaceBack(GetHighByte(new_value));
-    response.EmplaceBack(GetLowByte(new_value));
+    uint8_t buf[2];
+    EncodeU16(address, options_.byte_order, buf);
+    response.EmplaceBack(buf[0]);
+    response.EmplaceBack(buf[1]);
+    EncodeU16(static_cast<uint16_t>(new_value), options_.byte_order, buf);
+    response.EmplaceBack(buf[0]);
+    response.EmplaceBack(buf[1]);
     response.SetExceptionCode(ExceptionCode::kAcknowledge);
   } else {
     response.SetExceptionCode(ExceptionCode::kIllegalDataAddress);
@@ -273,20 +319,21 @@ void TcpSlave::ProcessWriteSingleCoil(AddressMap<bool> &address_map, const TcpRe
     return;
   }
 
-  const uint16_t address = MakeInt16(request.GetData()[1], request.GetData()[0]);
-  const uint16_t value = MakeInt16(request.GetData()[3], request.GetData()[2]);
+  const auto &data = request.GetData();
+  const uint16_t address = static_cast<uint16_t>(DecodeU16(data[0], data[1], options_.byte_order));
+  const uint16_t value = static_cast<uint16_t>(DecodeU16(data[2], data[3], options_.byte_order));
 
-  // Modbus spec: 0x0000 = OFF, 0xFF00 = ON
   bool coil_value = (value == supermb::kCoilOnValue);
 
   if (address_map[address].has_value()) {
     address_map.Set(address, coil_value);
-    // WriteSingleCoil response should echo back address and value (Modbus spec)
-    // Match request format: [high_addr, low_addr, high_val, low_val]
-    response.EmplaceBack(GetHighByte(address));
-    response.EmplaceBack(GetLowByte(address));
-    response.EmplaceBack(GetHighByte(value));
-    response.EmplaceBack(GetLowByte(value));
+    uint8_t buf[2];
+    EncodeU16(address, options_.byte_order, buf);
+    response.EmplaceBack(buf[0]);
+    response.EmplaceBack(buf[1]);
+    EncodeU16(value, options_.byte_order, buf);
+    response.EmplaceBack(buf[0]);
+    response.EmplaceBack(buf[1]);
     response.SetExceptionCode(ExceptionCode::kAcknowledge);
   } else {
     response.SetExceptionCode(ExceptionCode::kIllegalDataAddress);
@@ -297,14 +344,13 @@ void TcpSlave::ProcessWriteMultipleRegisters(AddressMap<int16_t> &address_map, c
                                              TcpResponse &response) {
   const auto &data = request.GetData();
 
-  // Data format: address (2), count (2), byte_count (1), values (count * 2)
   if (data.size() < kMinWriteDataSize) {
     response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
     return;
   }
 
-  uint16_t start_address = MakeInt16(data[1], data[0]);
-  uint16_t count = MakeInt16(data[3], data[2]);
+  uint16_t start_address = static_cast<uint16_t>(DecodeU16(data[0], data[1], options_.byte_order));
+  uint16_t count = static_cast<uint16_t>(DecodeU16(data[2], data[3], options_.byte_order));
   uint8_t byte_count = data[4];
 
   if (byte_count != static_cast<uint8_t>(count * 2) || data.size() < kMinWriteDataSize + byte_count) {
@@ -312,7 +358,39 @@ void TcpSlave::ProcessWriteMultipleRegisters(AddressMap<int16_t> &address_map, c
     return;
   }
 
-  // Check if all addresses exist
+  if (float_range_.has_value() && (count % 2) == 0) {
+    const auto [range_start, range_count] = *float_range_;
+    if (start_address >= range_start && start_address + count <= range_start + range_count) {
+      const size_t float_index_start = (start_address - range_start) / 2;
+      const size_t num_floats = count / 2;
+      if (float_index_start + num_floats <= float_storage_.size()) {
+        size_t data_offset = kMinWriteDataSize;
+        for (size_t i = 0; i < num_floats; ++i) {
+          if (data_offset + 3 >= data.size()) {
+            response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
+            return;
+          }
+          float_storage_[float_index_start + i] =
+              DecodeFloat(&data[data_offset], options_.byte_order, options_.word_order);
+          data_offset += 4;
+        }
+        uint8_t buf[2];
+        EncodeU16(start_address, options_.byte_order, buf);
+        response.EmplaceBack(buf[0]);
+        response.EmplaceBack(buf[1]);
+        EncodeU16(count, options_.byte_order, buf);
+        response.EmplaceBack(buf[0]);
+        response.EmplaceBack(buf[1]);
+        response.SetExceptionCode(ExceptionCode::kAcknowledge);
+        return;
+      }
+    }
+    if (start_address < range_start + range_count && start_address + count > range_start) {
+      response.SetExceptionCode(ExceptionCode::kIllegalDataAddress);
+      return;
+    }
+  }
+
   for (int i = 0; i < count; ++i) {
     if (!address_map[start_address + i].has_value()) {
       response.SetExceptionCode(ExceptionCode::kIllegalDataAddress);
@@ -320,25 +398,24 @@ void TcpSlave::ProcessWriteMultipleRegisters(AddressMap<int16_t> &address_map, c
     }
   }
 
-  // Write all registers
-  size_t data_offset = kMinWriteDataSize;  // Skip address, count, byte_count
+  size_t data_offset = kMinWriteDataSize;
   for (int i = 0; i < count; ++i) {
     if (data_offset + 1 >= data.size()) {
       response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
       return;
     }
-    // Modbus RTU uses big-endian: high byte first, then low byte
-    int16_t value = MakeInt16(data[data_offset + 1], data[data_offset]);
+    int16_t value = static_cast<int16_t>(DecodeU16(data[data_offset], data[data_offset + 1], options_.byte_order));
     address_map.Set(start_address + i, value);
     data_offset += 2;
   }
 
-  // WriteMultipleRegisters response should echo back address and count (Modbus spec)
-  // Format: [high_addr, low_addr, high_count, low_count]
-  response.EmplaceBack(GetHighByte(start_address));
-  response.EmplaceBack(GetLowByte(start_address));
-  response.EmplaceBack(GetHighByte(count));
-  response.EmplaceBack(GetLowByte(count));
+  uint8_t buf[2];
+  EncodeU16(start_address, options_.byte_order, buf);
+  response.EmplaceBack(buf[0]);
+  response.EmplaceBack(buf[1]);
+  EncodeU16(count, options_.byte_order, buf);
+  response.EmplaceBack(buf[0]);
+  response.EmplaceBack(buf[1]);
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
@@ -352,8 +429,8 @@ void TcpSlave::ProcessWriteMultipleCoils(AddressMap<bool> &address_map, const Tc
     return;
   }
 
-  uint16_t start_address = MakeInt16(data[1], data[0]);
-  uint16_t count = MakeInt16(data[3], data[2]);
+  uint16_t start_address = static_cast<uint16_t>(DecodeU16(data[0], data[1], options_.byte_order));
+  uint16_t count = static_cast<uint16_t>(DecodeU16(data[2], data[3], options_.byte_order));
   uint8_t byte_count = data[4];
 
   auto expected_byte_count = static_cast<uint8_t>((count + kCoilByteCountRoundingOffset) / kCoilsPerByte);
@@ -362,7 +439,6 @@ void TcpSlave::ProcessWriteMultipleCoils(AddressMap<bool> &address_map, const Tc
     return;
   }
 
-  // Check if all addresses exist
   for (int i = 0; i < count; ++i) {
     if (!address_map[start_address + i].has_value()) {
       response.SetExceptionCode(ExceptionCode::kIllegalDataAddress);
@@ -383,12 +459,13 @@ void TcpSlave::ProcessWriteMultipleCoils(AddressMap<bool> &address_map, const Tc
     address_map.Set(start_address + i, coil_value);
   }
 
-  // WriteMultipleCoils response should echo back address and count (Modbus spec)
-  // Format: [high_addr, low_addr, high_count, low_count]
-  response.EmplaceBack(GetHighByte(start_address));
-  response.EmplaceBack(GetLowByte(start_address));
-  response.EmplaceBack(GetHighByte(count));
-  response.EmplaceBack(GetLowByte(count));
+  uint8_t buf[2];
+  EncodeU16(start_address, options_.byte_order, buf);
+  response.EmplaceBack(buf[0]);
+  response.EmplaceBack(buf[1]);
+  EncodeU16(count, options_.byte_order, buf);
+  response.EmplaceBack(buf[0]);
+  response.EmplaceBack(buf[1]);
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
@@ -399,7 +476,7 @@ bool TcpSlave::ProcessIncomingFrame(ByteTransport &transport, uint32_t timeout_m
   }
 
   // Decode the request frame
-  auto request = TcpFrame::DecodeRequest(std::span<const uint8_t>(frame->data(), frame->size()));
+  auto request = TcpFrame::DecodeRequest(std::span<const uint8_t>(frame->data(), frame->size()), options_.byte_order);
   if (!request.has_value()) {
     return false;  // Invalid frame
   }
@@ -477,29 +554,34 @@ void TcpSlave::ProcessGetComEventCounter(const TcpRequest & /*request*/, TcpResp
   // Modbus uses big-endian: high byte first, then low byte
   response.EmplaceBack(0x00);  // Status high byte
   response.EmplaceBack(0x00);  // Status low byte (0x0000 = ready)
-  response.EmplaceBack(GetHighByte(com_event_counter_));
-  response.EmplaceBack(GetLowByte(com_event_counter_));
+  uint8_t buf[2];
+  EncodeU16(com_event_counter_, options_.byte_order, buf);
+  response.EmplaceBack(buf[0]);
+  response.EmplaceBack(buf[1]);
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
 void TcpSlave::ProcessGetComEventLog(const TcpRequest & /*request*/, TcpResponse &response) const {
   // FC 12: Get Com Event Log - Returns status, event count, message count, and events
   // Modbus uses big-endian: high byte first, then low byte
-  response.EmplaceBack(0x00);  // Status (0x00 = no error, kMaxByteValue = error)
-  response.EmplaceBack(GetHighByte(com_event_counter_));
-  response.EmplaceBack(GetLowByte(com_event_counter_));
-  response.EmplaceBack(GetHighByte(message_count_));
-  response.EmplaceBack(GetLowByte(message_count_));
+  response.EmplaceBack(0x00);  // Status
+  uint8_t buf[2];
+  EncodeU16(com_event_counter_, options_.byte_order, buf);
+  response.EmplaceBack(buf[0]);
+  response.EmplaceBack(buf[1]);
+  EncodeU16(message_count_, options_.byte_order, buf);
+  response.EmplaceBack(buf[0]);
+  response.EmplaceBack(buf[1]);
 
-  // Add event log entries (up to kComEventLogMaxSize events max per Modbus spec)
-  // Modbus uses big-endian: high byte first, then low byte
   size_t event_count = std::min(com_event_log_.size(), size_t{kComEventLogMaxSize});
   for (size_t i = 0; i < event_count; ++i) {
     const auto &entry = com_event_log_[i];
-    response.EmplaceBack(GetHighByte(entry.event_id));
-    response.EmplaceBack(GetLowByte(entry.event_id));
-    response.EmplaceBack(GetHighByte(entry.event_count));
-    response.EmplaceBack(GetLowByte(entry.event_count));
+    EncodeU16(entry.event_id, options_.byte_order, buf);
+    response.EmplaceBack(buf[0]);
+    response.EmplaceBack(buf[1]);
+    EncodeU16(entry.event_count, options_.byte_order, buf);
+    response.EmplaceBack(buf[0]);
+    response.EmplaceBack(buf[1]);
   }
 
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
@@ -544,12 +626,15 @@ void TcpSlave::ProcessReadFileRecord(const TcpRequest &request, TcpResponse &res
       response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
       return;
     }
-    uint16_t file_number = MakeInt16(data[data_offset + kFileRecordReadFileNumberOffset + 1],
-                                     data[data_offset + kFileRecordReadFileNumberOffset]);
-    uint16_t record_number = MakeInt16(data[data_offset + kFileRecordReadRecordNumberOffset + 1],
-                                       data[data_offset + kFileRecordReadRecordNumberOffset]);
-    uint16_t record_length = MakeInt16(data[data_offset + kFileRecordReadRecordLengthOffset + 1],
-                                       data[data_offset + kFileRecordReadRecordLengthOffset]);
+    uint16_t file_number =
+        static_cast<uint16_t>(DecodeU16(data[data_offset + kFileRecordReadFileNumberOffset],
+                                        data[data_offset + kFileRecordReadFileNumberOffset + 1], options_.byte_order));
+    uint16_t record_number = static_cast<uint16_t>(DecodeU16(data[data_offset + kFileRecordReadRecordNumberOffset],
+                                                             data[data_offset + kFileRecordReadRecordNumberOffset + 1],
+                                                             options_.byte_order));
+    uint16_t record_length = static_cast<uint16_t>(DecodeU16(data[data_offset + kFileRecordReadRecordLengthOffset],
+                                                             data[data_offset + kFileRecordReadRecordLengthOffset + 1],
+                                                             options_.byte_order));
     data_offset += kFileRecordReadMinSize;
 
     // Check if file and record exist
@@ -569,18 +654,19 @@ void TcpSlave::ProcessReadFileRecord(const TcpRequest &request, TcpResponse &res
     // (record_length * 2)
     response_data.emplace_back(
         supermb::kFileRecordReferenceType);  // Reference type (kFileRecordReferenceType = file record)
-    response_data.emplace_back(
-        static_cast<uint8_t>(record_length * 2 + 4));  // Data length (record data + file/record numbers)
-    response_data.emplace_back(GetHighByte(file_number));
-    response_data.emplace_back(GetLowByte(file_number));
-    response_data.emplace_back(GetHighByte(record_number));
-    response_data.emplace_back(GetLowByte(record_number));
+    response_data.emplace_back(static_cast<uint8_t>(record_length * 2 + 4));
+    uint8_t buf[2];
+    EncodeU16(file_number, options_.byte_order, buf);
+    response_data.emplace_back(buf[0]);
+    response_data.emplace_back(buf[1]);
+    EncodeU16(record_number, options_.byte_order, buf);
+    response_data.emplace_back(buf[0]);
+    response_data.emplace_back(buf[1]);
 
-    // Add record data
-    // Modbus RTU uses big-endian: high byte first, then low byte
     for (uint16_t i = 0; i < record_length && i < record_it->second.size(); ++i) {
-      response_data.emplace_back(GetHighByte(record_it->second[i]));
-      response_data.emplace_back(GetLowByte(record_it->second[i]));
+      EncodeU16(static_cast<uint16_t>(record_it->second[i]), options_.byte_order, buf);
+      response_data.emplace_back(buf[0]);
+      response_data.emplace_back(buf[1]);
     }
   }
 
@@ -621,11 +707,13 @@ void TcpSlave::ProcessWriteFileRecord(const TcpRequest &request, TcpResponse &re
       return;
     }
 
-    // File record write format: reference_type(1) + file_number(2) + record_number(2) + record_length(2) = 7 bytes
-    uint16_t file_number = MakeInt16(data[data_offset + 2], data[data_offset + 1]);
-    uint16_t record_number = MakeInt16(data[data_offset + 4], data[data_offset + 3]);
-    uint16_t record_length = MakeInt16(data[data_offset + supermb::kFileRecordBytesPerRecord],
-                                       data[data_offset + supermb::kFileRecordBytesPerRecord - 1]);
+    uint16_t file_number =
+        static_cast<uint16_t>(DecodeU16(data[data_offset + 1], data[data_offset + 2], options_.byte_order));
+    uint16_t record_number =
+        static_cast<uint16_t>(DecodeU16(data[data_offset + 3], data[data_offset + 4], options_.byte_order));
+    uint16_t record_length =
+        static_cast<uint16_t>(DecodeU16(data[data_offset + supermb::kFileRecordBytesPerRecord - 1],
+                                        data[data_offset + supermb::kFileRecordBytesPerRecord], options_.byte_order));
     data_offset += kFileRecordMinHeaderSize;
 
     if (data_offset + static_cast<size_t>(record_length) * 2 > data.size()) {
@@ -633,12 +721,10 @@ void TcpSlave::ProcessWriteFileRecord(const TcpRequest &request, TcpResponse &re
       return;
     }
 
-    // Create or update file record
     FileRecord record_data;
     record_data.reserve(record_length);
     for (uint16_t i = 0; i < record_length; ++i) {
-      // Modbus RTU uses big-endian: high byte first, then low byte
-      int16_t value = MakeInt16(data[data_offset + 1], data[data_offset]);
+      int16_t value = static_cast<int16_t>(DecodeU16(data[data_offset], data[data_offset + 1], options_.byte_order));
       record_data.push_back(value);
       data_offset += 2;
     }
@@ -662,10 +748,12 @@ void TcpSlave::ProcessMaskWriteRegister(AddressMap<int16_t> &address_map, const 
     return;
   }
 
-  // Mask write format: address(2) + and_mask(2) + or_mask(2) = 6 bytes
-  uint16_t address = MakeInt16(data[kMaskWriteAddressOffset + 1], data[kMaskWriteAddressOffset]);
-  uint16_t and_mask = MakeInt16(data[kMaskWriteAndMaskOffset + 1], data[kMaskWriteAndMaskOffset]);
-  uint16_t or_mask = MakeInt16(data[kMaskWriteOrMaskOffset + 1], data[kMaskWriteOrMaskOffset]);
+  uint16_t address = static_cast<uint16_t>(
+      DecodeU16(data[kMaskWriteAddressOffset], data[kMaskWriteAddressOffset + 1], options_.byte_order));
+  uint16_t and_mask = static_cast<uint16_t>(
+      DecodeU16(data[kMaskWriteAndMaskOffset], data[kMaskWriteAndMaskOffset + 1], options_.byte_order));
+  uint16_t or_mask = static_cast<uint16_t>(
+      DecodeU16(data[kMaskWriteOrMaskOffset], data[kMaskWriteOrMaskOffset + 1], options_.byte_order));
 
   auto current_value = address_map[address];
   if (!current_value.has_value()) {
@@ -673,36 +761,39 @@ void TcpSlave::ProcessMaskWriteRegister(AddressMap<int16_t> &address_map, const 
     return;
   }
 
-  // Apply mask: (current & and_mask) | or_mask
   auto new_value = static_cast<int16_t>((static_cast<uint16_t>(current_value.value()) & and_mask) | or_mask);
   address_map.Set(address, new_value);
 
-  // Response echoes back address, and_mask, or_mask
-  response.EmplaceBack(GetHighByte(address));
-  response.EmplaceBack(GetLowByte(address));
-  response.EmplaceBack(GetHighByte(and_mask));
-  response.EmplaceBack(GetLowByte(and_mask));
-  response.EmplaceBack(GetHighByte(or_mask));
-  response.EmplaceBack(GetLowByte(or_mask));
+  uint8_t buf[2];
+  EncodeU16(address, options_.byte_order, buf);
+  response.EmplaceBack(buf[0]);
+  response.EmplaceBack(buf[1]);
+  EncodeU16(and_mask, options_.byte_order, buf);
+  response.EmplaceBack(buf[0]);
+  response.EmplaceBack(buf[1]);
+  EncodeU16(or_mask, options_.byte_order, buf);
+  response.EmplaceBack(buf[0]);
+  response.EmplaceBack(buf[1]);
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
 }
 
 void TcpSlave::ProcessReadWriteMultipleRegisters(AddressMap<int16_t> &address_map, const TcpRequest &request,
                                                  TcpResponse &response) {
-  // FC 23: Read/Write Multiple Registers - Read from one area, write to another
   const auto &data = request.GetData();
   if (data.size() < kMinReadWriteDataSize) {
     response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
     return;
   }
 
-  // Parse read request: read_start (2), read_count (2)
-  uint16_t read_start = MakeInt16(data[kReadWriteReadStartOffset + 1], data[kReadWriteReadStartOffset]);
-  uint16_t read_count = MakeInt16(data[kReadWriteReadCountOffset + 1], data[kReadWriteReadCountOffset]);
+  uint16_t read_start = static_cast<uint16_t>(
+      DecodeU16(data[kReadWriteReadStartOffset], data[kReadWriteReadStartOffset + 1], options_.byte_order));
+  uint16_t read_count = static_cast<uint16_t>(
+      DecodeU16(data[kReadWriteReadCountOffset], data[kReadWriteReadCountOffset + 1], options_.byte_order));
 
-  // Parse write request: write_start (2), write_count (2), write_byte_count (1), write_values (N*2)
-  uint16_t write_start = MakeInt16(data[kReadWriteWriteStartOffset + 1], data[kReadWriteWriteStartOffset]);
-  uint16_t write_count = MakeInt16(data[kReadWriteWriteCountOffset + 1], data[kReadWriteWriteCountOffset]);
+  uint16_t write_start = static_cast<uint16_t>(
+      DecodeU16(data[kReadWriteWriteStartOffset], data[kReadWriteWriteStartOffset + 1], options_.byte_order));
+  uint16_t write_count = static_cast<uint16_t>(
+      DecodeU16(data[kReadWriteWriteCountOffset], data[kReadWriteWriteCountOffset + 1], options_.byte_order));
   uint8_t write_byte_count = data[kReadWriteByteCountOffset];
 
   if (write_byte_count != static_cast<uint8_t>(write_count * 2) ||
@@ -711,36 +802,96 @@ void TcpSlave::ProcessReadWriteMultipleRegisters(AddressMap<int16_t> &address_ma
     return;
   }
 
-  // First, perform the write operation
   size_t data_offset = kMinReadWriteDataWithValues;
-  for (int i = 0; i < write_count; ++i) {
-    if (!address_map[write_start + i].has_value()) {
+
+  if (float_range_.has_value() && (write_count % 2) == 0) {
+    const auto [range_start, range_count] = *float_range_;
+    if (write_start >= range_start && write_start + write_count <= range_start + range_count) {
+      const size_t float_index_start = (write_start - range_start) / 2;
+      const size_t num_floats = write_count / 2;
+      if (float_index_start + num_floats <= float_storage_.size()) {
+        for (size_t i = 0; i < num_floats; ++i) {
+          if (data_offset + 3 >= data.size()) {
+            response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
+            return;
+          }
+          float_storage_[float_index_start + i] =
+              DecodeFloat(&data[data_offset], options_.byte_order, options_.word_order);
+          data_offset += 4;
+        }
+      } else {
+        response.SetExceptionCode(ExceptionCode::kIllegalDataAddress);
+        return;
+      }
+    } else if (write_start < range_start + range_count && write_start + write_count > range_start) {
       response.SetExceptionCode(ExceptionCode::kIllegalDataAddress);
       return;
+    } else {
+      for (int i = 0; i < write_count; ++i) {
+        if (!address_map[write_start + i].has_value()) {
+          response.SetExceptionCode(ExceptionCode::kIllegalDataAddress);
+          return;
+        }
+        if (data_offset + 1 >= data.size()) {
+          response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
+          return;
+        }
+        int16_t value = static_cast<int16_t>(DecodeU16(data[data_offset], data[data_offset + 1], options_.byte_order));
+        address_map.Set(write_start + i, value);
+        data_offset += 2;
+      }
     }
-    if (data_offset + 1 >= data.size()) {
-      response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
-      return;
+  } else {
+    for (int i = 0; i < write_count; ++i) {
+      if (!address_map[write_start + i].has_value()) {
+        response.SetExceptionCode(ExceptionCode::kIllegalDataAddress);
+        return;
+      }
+      if (data_offset + 1 >= data.size()) {
+        response.SetExceptionCode(ExceptionCode::kIllegalDataValue);
+        return;
+      }
+      int16_t value = static_cast<int16_t>(DecodeU16(data[data_offset], data[data_offset + 1], options_.byte_order));
+      address_map.Set(write_start + i, value);
+      data_offset += 2;
     }
-    // Modbus RTU uses big-endian: high byte first, then low byte
-    int16_t value = MakeInt16(data[data_offset + 1], data[data_offset]);
-    address_map.Set(write_start + i, value);
-    data_offset += 2;
   }
 
-  // Then, perform the read operation
-  auto byte_count = static_cast<uint8_t>(read_count * 2);
-  response.EmplaceBack(byte_count);  // FC23 response format: byte_count prefix, then register data
+  if (float_range_.has_value() && (read_count % 2) == 0) {
+    const auto [range_start, range_count] = *float_range_;
+    if (read_start >= range_start && read_start + read_count <= range_start + range_count) {
+      const size_t float_index_start = (read_start - range_start) / 2;
+      const size_t num_floats = read_count / 2;
+      if (float_index_start + num_floats <= float_storage_.size()) {
+        auto byte_count = static_cast<uint8_t>(read_count * 2);
+        response.EmplaceBack(byte_count);
+        uint8_t buf[4];
+        for (size_t i = 0; i < num_floats; ++i) {
+          EncodeFloat(float_storage_[float_index_start + i], options_.byte_order, options_.word_order, buf);
+          response.EmplaceBack(buf[0]);
+          response.EmplaceBack(buf[1]);
+          response.EmplaceBack(buf[2]);
+          response.EmplaceBack(buf[3]);
+        }
+        response.SetExceptionCode(ExceptionCode::kAcknowledge);
+        return;
+      }
+    }
+  }
 
+  auto byte_count = static_cast<uint8_t>(read_count * 2);
+  response.EmplaceBack(byte_count);
+
+  uint8_t buf[2];
   for (int i = 0; i < read_count; ++i) {
     auto reg_value = address_map[read_start + i];
     if (!reg_value.has_value()) {
       response.SetExceptionCode(ExceptionCode::kIllegalDataAddress);
       return;
     }
-    // Modbus RTU uses big-endian: high byte first, then low byte
-    response.EmplaceBack(GetHighByte(reg_value.value()));
-    response.EmplaceBack(GetLowByte(reg_value.value()));
+    EncodeU16(static_cast<uint16_t>(reg_value.value()), options_.byte_order, buf);
+    response.EmplaceBack(buf[0]);
+    response.EmplaceBack(buf[1]);
   }
 
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
@@ -754,9 +905,8 @@ void TcpSlave::ProcessReadFIFOQueue(const TcpRequest &request, TcpResponse &resp
     return;
   }
 
-  uint16_t fifo_address = MakeInt16(data[1], data[0]);
+  uint16_t fifo_address = static_cast<uint16_t>(DecodeU16(data[0], data[1], options_.byte_order));
 
-  // Check if FIFO queue exists (empty queue is valid per Modbus spec)
   auto fifo_it = fifo_storage_.find(fifo_address);
   if (fifo_it == fifo_storage_.end()) {
     response.SetExceptionCode(ExceptionCode::kIllegalDataAddress);
@@ -765,21 +915,20 @@ void TcpSlave::ProcessReadFIFOQueue(const TcpRequest &request, TcpResponse &resp
 
   const FIFOQueue &fifo_queue = fifo_it->second;
   auto fifo_count = static_cast<uint16_t>(fifo_queue.size());
-  // Per Modbus spec: byte_count includes the 2-byte FIFO count field + data
-  uint16_t byte_count = 2 + (fifo_count * 2);  // 2 for fifo_count + data bytes
+  uint16_t byte_count = 2 + (fifo_count * 2);
 
-  // FIFO response: byte count (2), FIFO count (2), FIFO data (fifo_count * 2)
-  // Modbus RTU uses big-endian: high byte first, then low byte
-  response.EmplaceBack(GetHighByte(byte_count));
-  response.EmplaceBack(GetLowByte(byte_count));
-  response.EmplaceBack(GetHighByte(fifo_count));
-  response.EmplaceBack(GetLowByte(fifo_count));
+  uint8_t buf[2];
+  EncodeU16(byte_count, options_.byte_order, buf);
+  response.EmplaceBack(buf[0]);
+  response.EmplaceBack(buf[1]);
+  EncodeU16(fifo_count, options_.byte_order, buf);
+  response.EmplaceBack(buf[0]);
+  response.EmplaceBack(buf[1]);
 
-  // Add FIFO queue data
   for (int16_t value : fifo_queue) {
-    // Modbus RTU uses big-endian: high byte first, then low byte
-    response.EmplaceBack(GetHighByte(value));
-    response.EmplaceBack(GetLowByte(value));
+    EncodeU16(static_cast<uint16_t>(value), options_.byte_order, buf);
+    response.EmplaceBack(buf[0]);
+    response.EmplaceBack(buf[1]);
   }
 
   response.SetExceptionCode(ExceptionCode::kAcknowledge);

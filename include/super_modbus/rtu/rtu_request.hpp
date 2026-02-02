@@ -6,6 +6,7 @@
 #include <vector>
 #include "../common/address_span.hpp"
 #include "../common/function_code.hpp"
+#include "../common/wire_format_options.hpp"
 
 namespace supermb {
 
@@ -16,8 +17,9 @@ class RtuRequest {
     FunctionCode function_code;
   };
 
-  explicit RtuRequest(Header header)
-      : header_(header) {}
+  explicit RtuRequest(Header header, ByteOrder byte_order = ByteOrder::BigEndian)
+      : header_(header),
+        byte_order_(byte_order) {}
 
   [[nodiscard]] uint8_t GetSlaveId() const { return header_.slave_id; }
   [[nodiscard]] FunctionCode GetFunctionCode() const { return header_.function_code; }
@@ -39,8 +41,11 @@ class RtuRequest {
   void SetRawData(const std::vector<uint8_t> &data) { data_ = data; }
   void SetRawData(std::span<const uint8_t> data) { data_.assign(data.begin(), data.end()); }
 
+  [[nodiscard]] ByteOrder GetByteOrder() const noexcept { return byte_order_; }
+
  private:
   Header header_;
+  ByteOrder byte_order_;
   std::vector<uint8_t> data_{};
 };
 

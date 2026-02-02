@@ -6,6 +6,7 @@
 #include <vector>
 #include "../common/address_span.hpp"
 #include "../common/function_code.hpp"
+#include "../common/wire_format_options.hpp"
 
 namespace supermb {
 
@@ -17,8 +18,9 @@ class TcpRequest {
     FunctionCode function_code;
   };
 
-  explicit TcpRequest(Header header)
-      : header_(header) {}
+  explicit TcpRequest(Header header, ByteOrder byte_order = ByteOrder::BigEndian)
+      : header_(header),
+        byte_order_(byte_order) {}
 
   [[nodiscard]] uint16_t GetTransactionId() const { return header_.transaction_id; }
   [[nodiscard]] uint8_t GetUnitId() const { return header_.unit_id; }
@@ -41,8 +43,11 @@ class TcpRequest {
   void SetRawData(const std::vector<uint8_t> &data) { data_ = data; }
   void SetRawData(std::span<const uint8_t> data) { data_.assign(data.begin(), data.end()); }
 
+  [[nodiscard]] ByteOrder GetByteOrder() const noexcept { return byte_order_; }
+
  private:
   Header header_;
+  ByteOrder byte_order_;
   std::vector<uint8_t> data_{};
 };
 

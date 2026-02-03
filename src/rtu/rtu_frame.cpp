@@ -153,9 +153,7 @@ std::optional<RtuResponse> RtuFrame::DecodeResponse(std::span<const uint8_t> fra
   RtuResponse response(slave_id, function_code);
 
   if (is_exception) {
-    // Exception response: next byte is exception code
-    // Note: frame.size() >= kMinFrameSize (4) already checked above, so >= 3 is always true
-    // But we keep the check for clarity and defensive programming
+    // Exception response: next byte is exception code (size already >= kMinFrameSize)
     if (frame.size() >= 3) {  // NOLINT(cppcheck-suppress knownConditionTrueFalse)
       auto exception_code = static_cast<ExceptionCode>(frame[2]);
       response.SetExceptionCode(exception_code);
@@ -239,8 +237,7 @@ bool RtuFrame::IsResponseFrameComplete(std::span<const uint8_t> frame) {
 }
 
 bool RtuFrame::IsFrameComplete(std::span<const uint8_t> frame) {
-  // Legacy function - try to determine if it's a request or response
-  // This is less reliable, prefer using IsRequestFrameComplete or IsResponseFrameComplete
+  // Legacy: infer request vs response. Prefer IsRequestFrameComplete / IsResponseFrameComplete.
   if (frame.size() < 2) {
     return false;
   }

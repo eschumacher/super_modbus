@@ -62,10 +62,8 @@ int main(int argc, const char *argv[]) {
   std::signal(SIGINT, signal_handler);
   std::signal(SIGTERM, signal_handler);
 
-  // Create transport
-  // TODO: Replace with your serial port transport implementation
-  // MySerialTransport transport(port, baud_rate);
-  MemoryTransport transport;  // Placeholder - replace with real serial transport
+  // Use SerialTransport (see examples/serial_transport.hpp) for real hardware
+  MemoryTransport transport;
 
   // Create slave
   RtuSlave slave(slave_id);

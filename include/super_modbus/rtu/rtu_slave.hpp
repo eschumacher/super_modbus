@@ -25,6 +25,7 @@ class RtuSlave {
 
   [[nodiscard]] uint8_t GetId() const noexcept { return id_; }
   void SetId(uint8_t slave_id) noexcept { id_ = slave_id; }
+  [[nodiscard]] ByteOrder GetByteOrder() const noexcept { return options_.byte_order; }
 
   /**
    * @brief Process a Modbus request and return response

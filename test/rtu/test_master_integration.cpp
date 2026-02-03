@@ -726,9 +726,7 @@ TEST(MasterIntegration, ReadFileRecord) {
   write_req.SetRawData(write_data);
   slave.Process(write_req);
 
-  // Master reads file record
-  // Note: ReadFileRecord uses SendRequest internally, which needs the simulator to process
-  // the request. We need to manually handle the communication for the simulator.
+  // ReadFileRecord uses SendRequest; simulator must see the request, so we drive it manually
   RtuRequest read_req{{kSlaveId, FunctionCode::kReadFileRecord}};
   std::vector<std::tuple<uint16_t, uint16_t, uint16_t>> file_records;
   file_records.emplace_back(1, 0, 2);  // File 1, Record 0, Length 2

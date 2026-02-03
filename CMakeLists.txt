@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
+include(GNUInstallDirs)
 include(CTest)
 
 include(FetchContent)
@@ -20,6 +21,9 @@ add_library(${PROJECT_NAME}-lib
     src/rtu/rtu_slave.cpp
     src/rtu/rtu_frame.cpp
     src/rtu/rtu_master.cpp
+    src/ascii/ascii_frame.cpp
+    src/ascii/ascii_master.cpp
+    src/ascii/ascii_slave.cpp
     src/tcp/tcp_request.cpp
     src/tcp/tcp_slave.cpp
     src/tcp/tcp_frame.cpp
@@ -31,12 +35,37 @@ add_library(${PROJECT_NAME}-lib
 
 target_include_directories(${PROJECT_NAME}-lib
     INTERFACE
-    include/
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
 )
 
 target_include_directories(${PROJECT_NAME}-lib
     PRIVATE
     include/super_modbus/
+)
+
+###################################
+# Install targets
+###################################
+install(TARGETS ${PROJECT_NAME}-lib
+    EXPORT super-modbus-targets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(DIRECTORY include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILES_MATCHING
+    PATTERN "*.hpp"
+    PATTERN "*.h"
+)
+
+install(EXPORT super-modbus-targets
+    FILE super-modbus-targets.cmake
+    NAMESPACE super-modbus::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/super-modbus
 )
 
 ###################################
@@ -107,5 +136,7 @@ endif()
 ###############################
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Modern C++ Modbus library (RTU, TCP, ASCII, UDP)")
+set(CPACK_PACKAGE_VENDOR "Super Modbus")
 
 include(CPack)

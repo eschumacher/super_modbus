@@ -12,6 +12,7 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(run_tests
     test_gtest.cpp
+    ascii/test_ascii_frame.cpp
     rtu/test_rtu_slave.cpp
     rtu/test_rtu_master.cpp
     rtu/test_new_function_codes.cpp

@@ -1,12 +1,11 @@
 /**
  * @file example_serial_transport.cpp
- * @brief Example implementation of ByteTransport for serial port
+ * @brief Template/skeleton for implementing ByteTransport for serial port
  *
- * This example shows how to implement the ByteTransport interface for a serial port.
- * This is a template/example - you need to adapt it to your specific serial port library.
+ * This is a STUB showing the interface. For a working implementation, use
+ * serial_transport.hpp which provides a complete POSIX termios-based transport.
  *
- * Common serial port libraries:
- * - Linux: termios (POSIX)
+ * This file is not compiled by default. Adapt this template for:
  * - Windows: CreateFile/ReadFile/WriteFile
  * - Cross-platform: boost::asio, libserial, etc.
  */
@@ -33,77 +32,45 @@ class ExampleSerialTransport : public ByteTransport {
    * @param baud_rate Baud rate (e.g., 9600, 19200, 38400, 115200)
    */
   ExampleSerialTransport(const char *port_name, int baud_rate) {
-    // TODO: Open serial port
-    // Example (pseudo-code):
-    //   serial_fd_ = open(port_name, O_RDWR | O_NOCTTY);
-    //   configure_serial_port(serial_fd_, baud_rate);
+    (void)port_name;
+    (void)baud_rate;
+    // open(port_name, O_RDWR | O_NOCTTY); configure termios; store fd_
   }
 
   ~ExampleSerialTransport() override {
-    // TODO: Close serial port
-    // Example (pseudo-code):
-    //   if (serial_fd_ >= 0) {
-    //     close(serial_fd_);
-    //   }
+    // if (fd_ >= 0) close(fd_);
   }
 
   // ByteReader interface
   int Read(std::span<uint8_t> buffer) override {
-    // TODO: Read bytes from serial port
-    // Example (pseudo-code using POSIX read):
-    //   ssize_t bytes_read = read(serial_fd_, buffer.data(), buffer.size());
-    //   return (bytes_read > 0) ? static_cast<int>(bytes_read) : 0;
-
-    // For now, return 0 (no data)
+    (void)buffer;
+    // read(fd_, buffer.data(), buffer.size());
     return 0;
   }
 
   bool HasData() const override {
-    // TODO: Check if data is available
-    // Example (pseudo-code using select/poll):
-    //   fd_set read_fds;
-    //   FD_ZERO(&read_fds);
-    //   FD_SET(serial_fd_, &read_fds);
-    //   struct timeval timeout = {0, 0};
-    //   return select(serial_fd_ + 1, &read_fds, nullptr, nullptr, &timeout) > 0;
-
+    // select/poll or ioctl(FIONREAD)
     return false;
   }
 
   size_t AvailableBytes() const override {
-    // TODO: Return number of bytes available
-    // Example (pseudo-code using ioctl FIONREAD on Linux):
-    //   int bytes_available = 0;
-    //   ioctl(serial_fd_, FIONREAD, &bytes_available);
-    //   return static_cast<size_t>(bytes_available);
-
+    // ioctl(fd_, FIONREAD, &n) on Linux
     return 0;
   }
 
   // ByteWriter interface
   int Write(std::span<const uint8_t> data) override {
-    // TODO: Write bytes to serial port
-    // Example (pseudo-code using POSIX write):
-    //   ssize_t bytes_written = write(serial_fd_, data.data(), data.size());
-    //   return (bytes_written > 0) ? static_cast<int>(bytes_written) : -1;
-
-    return static_cast<int>(data.size());  // Stub: assume all written
+    // write(fd_, data.data(), data.size());
+    return static_cast<int>(data.size());
   }
 
   bool Flush() override {
-    // TODO: Flush serial port output buffer
-    // Example (pseudo-code using tcdrain):
-    //   return tcdrain(serial_fd_) == 0;
-
-    return true;  // Stub
+    // tcdrain(fd_);
+    return true;
   }
 
  private:
-  // TODO: Add your serial port handle/file descriptor
-  // Examples:
-  //   int serial_fd_;           // POSIX file descriptor
-  //   HANDLE serial_handle_;    // Windows handle
-  //   boost::asio::serial_port serial_port_;  // boost::asio
+  // int fd_; or HANDLE, or boost::asio::serial_port, etc.
 };
 
 }  // namespace supermb
@@ -139,14 +106,7 @@ int main() {
     slave.AddHoldingRegisters({0, 100});
     slave.AddCoils({0, 100});
 
-    // Poll for incoming requests
-    // In a real application, this would be in a loop:
-    // while (running) {
-    //   if (slave.Poll(serial)) {
-    //     // Request processed
-    //   }
-    //   std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    // }
+    // while (running) { if (slave.Poll(serial)) { ... } sleep(10ms); }
   }
 
   return 0;

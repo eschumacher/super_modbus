@@ -270,12 +270,7 @@ TEST(RtuMasterCoverage, ReadFileRecord_EmptyData) {
   EXPECT_FALSE(result.has_value());
 }
 
-// Test ReadFileRecord with response_length = 0
-// Note: The code checks data.size() < 1, so response_length = 0 with only 1 byte
-// should pass the size check but return empty map (no records)
-// However, looking at the code, if response_length = 0, the while loop won't execute
-// and it returns an empty map, which is valid. But the test might be hitting
-// a different code path. Let's test with a different scenario.
+// ReadFileRecord with response_length = 0: one byte (length) satisfies size check, returns empty map
 TEST(RtuMasterCoverage, ReadFileRecord_ZeroResponseLength) {
   static constexpr uint8_t kSlaveId{1};
   MemoryTransport transport;
@@ -283,7 +278,7 @@ TEST(RtuMasterCoverage, ReadFileRecord_ZeroResponseLength) {
 
   RtuResponse response{kSlaveId, FunctionCode::kReadFileRecord};
   response.SetExceptionCode(ExceptionCode::kAcknowledge);
-  response.EmplaceBack(0);  // Response length = 0
+  response.EmplaceBack(0);  // response_length = 0
 
   auto frame = RtuFrame::EncodeResponse(response);
   transport.SetReadData(frame);
@@ -292,11 +287,6 @@ TEST(RtuMasterCoverage, ReadFileRecord_ZeroResponseLength) {
   std::vector<std::tuple<uint16_t, uint16_t, uint16_t>> records;
   records.emplace_back(1, 0, 10);
   auto result = master.ReadFileRecord(kSlaveId, records);
-  // The code checks: if (data.size() < static_cast<size_t>(1 + response_length))
-  // With response_length=0, this is: if (data.size() < 1)
-  // We have 1 byte (the response_length byte), so it passes
-  // Then while(offset < end_offset) where offset=1, end_offset=1, so loop doesn't run
-  // Returns empty map, which is valid
   ASSERT_TRUE(result.has_value());
   EXPECT_EQ(result->size(), 0);
 }
@@ -1610,7 +1600,7 @@ TEST(RtuMasterCoverage, WriteFloats_Empty) {
   RtuMaster master{transport};
   std::vector<float> values;
   bool ok = master.WriteFloats(kSlaveId, 0, values);
-  EXPECT_TRUE(ok);  // empty write is success per implementation
+  EXPECT_TRUE(ok);  // empty write is accepted
 }
 
 TEST(RtuMasterCoverage, ReadFloats_FloatRangeOutOfRange) {

@@ -299,7 +299,7 @@ make
 See the `examples/` directory for complete example code demonstrating:
 - Master/client usage (RTU)
 - Slave/server usage (RTU)
-- Serial port transport implementation template
+- Serial port transport (serial_transport.hpp, POSIX)
 - Complete master-slave loopback demonstration
 - Testable slave for use with Modbus Poll (RTU)
 - **Testable TCP slave** (`testable_tcp_slave`) for use with mbpoll or other Modbus TCP masters
@@ -445,7 +445,7 @@ mbpoll -m tcp -a 1 -0 -r 0 -c 10 -1 -p 5502 127.0.0.1
 To test with Modbus Poll or similar Windows software:
 
 1. **Build the library and examples** (see Building section)
-2. **Implement serial transport** (see `examples/example_serial_transport.cpp`)
+2. **Implement serial transport** (see `examples/serial_transport.hpp` for a POSIX reference)
 3. **Set up virtual ports** (use com0com on Windows or bridge WSL2 ports)
 4. **Run testable slave**: `./testable_slave <port> <baud> <slave_id>`
 5. **Connect Modbus Poll** to the serial port with matching settings:

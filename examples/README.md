@@ -18,8 +18,8 @@ Demonstrates how to use the library as a Modbus RTU Slave/Server. Shows:
 - Setting up FIFO queues
 - Processing incoming Modbus requests
 
-### `example_serial_transport.cpp`
-Shows how to implement the `ByteTransport` interface for a serial port. This is a template that you need to adapt to your specific serial port library (termios, Windows API, boost::asio, etc.).
+### `serial_transport.hpp`
+POSIX implementation of `ByteTransport` for serial ports (termios). Use as a reference when implementing your own transport for Linux, macOS, or other POSIX systems. For Windows or cross-platform use, implement the interface using your preferred serial library (e.g. boost::asio, libserial).
 
 ### `example_master_slave_loopback.cpp`
 Complete example showing master-slave communication using `MemoryTransport`. This demonstrates:
@@ -70,7 +70,7 @@ g++ -std=c++20 -I include examples/example_master_slave_loopback.cpp -L build -l
 
 To use the library with real serial hardware:
 
-1. **Implement ByteTransport** for your serial port (see `example_serial_transport.cpp`)
+1. **Implement ByteTransport** for your serial port (see `serial_transport.hpp` for a POSIX reference)
 2. **Create Master or Slave** with your transport
 3. **For Master**: Call read/write methods directly
 4. **For Slave**: Poll transport in a loop:

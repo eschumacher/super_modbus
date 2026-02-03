@@ -107,7 +107,6 @@ if (BUILD_EXAMPLES)
     target_link_libraries(test_master_comprehensive PRIVATE ${PROJECT_NAME}-lib)
     target_include_directories(test_master_comprehensive PRIVATE examples/)
 
-    # Note: example_serial_transport.cpp is a template, not meant to be compiled
     # Note: serial_transport.hpp is a header-only implementation for use in examples
 endif()
 

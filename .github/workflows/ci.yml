@@ -208,7 +208,6 @@ jobs:
     - name: Generate coverage
       run: |
         cd build
-        make coverage-super-modbus-lib || true
         make coverage-run_tests || true
 
     - name: Upload coverage to Codecov
@@ -281,7 +280,6 @@ jobs:
     - name: Generate coverage
       run: |
         cd build
-        make coverage-super-modbus-lib || true
         make coverage-run_tests || true
 
     - name: Upload coverage to Codecov

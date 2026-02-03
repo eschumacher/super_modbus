@@ -12,7 +12,7 @@
  *   ./testable_slave /dev/ttyUSB0 9600 1
  *
  * To use with real hardware, implement a ByteTransport for your serial port.
- * See example_serial_transport.cpp for a template.
+ * See serial_transport.hpp for a POSIX implementation.
  */
 
 #include <iostream>

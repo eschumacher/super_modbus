@@ -13,6 +13,8 @@ FetchContent_MakeAvailable(googletest)
 add_executable(run_tests
     test_gtest.cpp
     ascii/test_ascii_frame.cpp
+    ascii/test_ascii_integration.cpp
+    ascii/test_ascii_master_coverage.cpp
     rtu/test_rtu_slave.cpp
     rtu/test_rtu_master.cpp
     rtu/test_new_function_codes.cpp
@@ -58,7 +60,7 @@ if (COVERAGE)
     add_custom_target(coverage-clean ${PROJECT_NAME}-lib PRE_BUILD COMMAND find ${CMAKE_BINARY_DIR} -type f -name '*.gcda' -exec rm {} +)
 
     include(AddCoverage)
-    AddCoverage(${PROJECT_NAME}-lib)
+    # Only add coverage for run_tests - library coverage is produced when tests run
     AddCoverage(run_tests)
 endif()
 

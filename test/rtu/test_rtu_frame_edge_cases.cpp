@@ -188,22 +188,23 @@ TEST(RTUFrameEdgeCases, IsResponseFrameComplete) {
   EXPECT_TRUE(RtuFrame::IsResponseFrameComplete(frame6));
 }
 
-TEST(RTUFrameEdgeCases, IsFrameComplete) {
+TEST(RTUFrameEdgeCases, IsRequestFrameComplete_IsResponseFrameComplete) {
   // Too short
   std::vector<uint8_t> frame1{0x01};
-  EXPECT_FALSE(RtuFrame::IsFrameComplete(frame1));
+  EXPECT_FALSE(RtuFrame::IsRequestFrameComplete(frame1));
+  EXPECT_FALSE(RtuFrame::IsResponseFrameComplete(frame1));
 
-  // Exception response (always treated as response)
+  // Exception response
   std::vector<uint8_t> frame2{0x01, 0x83, 0x02, 0xC1, 0xF0};
-  EXPECT_TRUE(RtuFrame::IsFrameComplete(frame2));
+  EXPECT_TRUE(RtuFrame::IsResponseFrameComplete(frame2));
 
   // Read request (exact size match)
   std::vector<uint8_t> frame3{0x01, 0x03, 0x00, 0x00, 0x00, 0x0A, 0xCD, 0xC5};
-  EXPECT_TRUE(RtuFrame::IsFrameComplete(frame3));
+  EXPECT_TRUE(RtuFrame::IsRequestFrameComplete(frame3));
 
   // Read response (variable size)
   std::vector<uint8_t> frame4{0x01, 0x03, 0x02, 0x12, 0x34, 0xCD, 0xC5};
-  EXPECT_TRUE(RtuFrame::IsFrameComplete(frame4));
+  EXPECT_TRUE(RtuFrame::IsResponseFrameComplete(frame4));
 }
 
 TEST(RTUFrameEdgeCases, DecodeRequestWithRawData) {

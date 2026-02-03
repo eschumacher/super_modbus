@@ -73,3 +73,56 @@ TEST(AsciiFrame, DecodeRequestLittleEndian) {
   EXPECT_EQ(span->start_address, 10u);
   EXPECT_EQ(span->reg_count, 5u);
 }
+
+TEST(AsciiFrame, HexToBytes_OddLength) {
+  auto result = AsciiFrame::HexToBytes("123");
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST(AsciiFrame, HexToBytes_InvalidChar) {
+  auto result = AsciiFrame::HexToBytes("12G4");
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST(AsciiFrame, HexToBytes_Lowercase) {
+  auto result = AsciiFrame::HexToBytes("abcd");
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ((*result)[0], 0xAB);
+  EXPECT_EQ((*result)[1], 0xCD);
+}
+
+TEST(AsciiFrame, DecodeRequest_Empty) {
+  auto result = AsciiFrame::DecodeRequest("", ByteOrder::BigEndian);
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST(AsciiFrame, DecodeRequest_NoStartColon) {
+  auto result = AsciiFrame::DecodeRequest("01030000000AFA", ByteOrder::BigEndian);
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST(AsciiFrame, DecodeRequest_BadLRC) {
+  std::string frame = ":01030000000AFF\r\n";
+  auto result = AsciiFrame::DecodeRequest(frame, ByteOrder::BigEndian);
+  EXPECT_FALSE(result.has_value());
+}
+
+TEST(AsciiFrame, DecodeResponse_Exception) {
+  RtuResponse response(1, FunctionCode::kReadHR);
+  response.SetExceptionCode(ExceptionCode::kIllegalDataAddress);
+  std::string encoded = AsciiFrame::EncodeResponse(response);
+  auto decoded = AsciiFrame::DecodeResponse(encoded);
+  ASSERT_TRUE(decoded.has_value());
+  EXPECT_EQ(decoded->GetExceptionCode(), ExceptionCode::kIllegalDataAddress);
+}
+
+TEST(AsciiFrame, DecodeRequest_NoCRLF) {
+  RtuRequest request({1, FunctionCode::kReadHR});
+  request.SetAddressSpan({0, 10});
+  std::string encoded = AsciiFrame::EncodeRequest(request);
+  encoded.pop_back();
+  encoded.pop_back();
+  auto decoded = AsciiFrame::DecodeRequest(encoded, ByteOrder::BigEndian);
+  ASSERT_TRUE(decoded.has_value());
+  EXPECT_EQ(decoded->GetSlaveId(), 1);
+}

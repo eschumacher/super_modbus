@@ -236,34 +236,4 @@ bool RtuFrame::IsResponseFrameComplete(std::span<const uint8_t> frame) {
   return frame.size() >= min_size;
 }
 
-bool RtuFrame::IsFrameComplete(std::span<const uint8_t> frame) {
-  // Legacy: infer request vs response. Prefer IsRequestFrameComplete / IsResponseFrameComplete.
-  if (frame.size() < 2) {
-    return false;
-  }
-
-  uint8_t function_code_byte = frame[1];
-  bool is_exception = (function_code_byte & kExceptionFunctionCodeMask) != 0;
-
-  // Exception responses are always responses
-  if (is_exception) {
-    return IsResponseFrameComplete(frame);
-  }
-
-  // For read operations, try to determine by frame size
-  auto function_code = static_cast<FunctionCode>(function_code_byte & kFunctionCodeMask);
-  if (function_code == FunctionCode::kReadHR || function_code == FunctionCode::kReadIR ||
-      function_code == FunctionCode::kReadCoils || function_code == FunctionCode::kReadDI) {
-    // Request is always kWriteSingleFrameSize bytes, response is variable
-    if (frame.size() == kWriteSingleFrameSize) {
-      return IsRequestFrameComplete(frame);
-    }
-    // Otherwise, assume it's a response
-    return IsResponseFrameComplete(frame);
-  }
-
-  // For other function codes, check as request first (most common case)
-  return IsRequestFrameComplete(frame);
-}
-
 }  // namespace supermb

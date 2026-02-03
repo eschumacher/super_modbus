@@ -393,7 +393,7 @@ std::optional<std::vector<int16_t>> AsciiMaster::ReadFIFOQueue(uint8_t slave_id,
     return {};
   }
   uint16_t fifo_count = static_cast<uint16_t>(DecodeU16(data[2], data[3], options_.byte_order));
-  if (data.size() < 4 + fifo_count * 2) {
+  if (data.size() < 4u + static_cast<size_t>(fifo_count) * 2u) {
     return {};
   }
   std::vector<int16_t> fifo;

@@ -75,8 +75,12 @@ bool AsciiSlave::ProcessIncomingFrame(ByteTransport &transport, uint32_t timeout
   std::string response_frame = AsciiFrame::EncodeResponse(response);
   std::span<const uint8_t> response_bytes(reinterpret_cast<const uint8_t *>(response_frame.data()),
                                           response_frame.size());
-  transport.Write(response_bytes);
-  transport.Flush();
+  if (transport.Write(response_bytes) != static_cast<int>(response_bytes.size())) {
+    return false;
+  }
+  if (!transport.Flush()) {
+    return false;
+  }
   return true;
 }
 

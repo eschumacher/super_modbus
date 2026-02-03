@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <numeric>
 #include <span>
 
 namespace supermb {
@@ -15,10 +16,7 @@ namespace supermb {
  * @return 8-bit LRC value
  */
 [[nodiscard]] inline uint8_t CalculateLrc8(std::span<const uint8_t> data) {
-  uint16_t sum = 0;
-  for (uint8_t byte : data) {
-    sum += byte;
-  }
+  uint16_t sum = std::accumulate(data.begin(), data.end(), uint16_t{0});
   return static_cast<uint8_t>((256 - (sum & 0xFF)) & 0xFF);
 }
 
@@ -34,10 +32,7 @@ namespace supermb {
   if (pdu.empty()) {
     return false;
   }
-  uint16_t sum = 0;
-  for (uint8_t byte : pdu) {
-    sum += byte;
-  }
+  uint16_t sum = std::accumulate(pdu.begin(), pdu.end(), uint16_t{0});
   return (sum & 0xFF) == 0;
 }
 

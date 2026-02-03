@@ -104,7 +104,7 @@ ls -lh libsuper-modbus-lib.a 2>/dev/null | awk '{print "  " $9 " (" $5 ")"}'
 echo ""
 
 echo "To use with Modbus Poll:"
-echo "  1. Implement serial transport (see examples/example_serial_transport.cpp)"
+echo "  1. Implement serial transport (see examples/serial_transport.hpp)"
 echo "  2. Build testable_slave: make testable_slave"
 echo "  3. Run: ./testable_slave /dev/ttyUSB0 9600 1"
 echo "  4. Connect Modbus Poll to the serial port"

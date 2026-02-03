@@ -1107,18 +1107,13 @@ TEST(TCPMasterCoverage, ReadHoldingRegisters_NoResponse) {
   EXPECT_FALSE(result.has_value());
 }
 
-// Test ReadHoldingRegisters with SetAddressSpan failure
+// ReadHoldingRegisters with count 0 (edge case; behavior is implementation-defined)
 TEST(TCPMasterCoverage, ReadHoldingRegisters_SetAddressSpanFailure) {
   static constexpr uint8_t kUnitId{1};
   MemoryTransport transport;
   TcpMaster master{transport};
 
-  // This test verifies the error path when SetAddressSpan fails
-  // However, SetAddressSpan should not fail for valid function codes
-  // So we test with an invalid count (0) which might cause issues
-  auto result = master.ReadHoldingRegisters(kUnitId, 0, 0);  // Zero count
-  // Should handle gracefully - either return empty or fail
-  // The actual behavior depends on implementation
+  auto result = master.ReadHoldingRegisters(kUnitId, 0, 0);
 }
 
 // Test ReadInputRegisters with no response (timeout)
@@ -1141,9 +1136,7 @@ TEST(TCPMasterCoverage, ReadInputRegisters_SetAddressSpanFailure) {
   // Should handle gracefully
 }
 
-// Test WriteSingleRegister with SetWriteSingleRegisterData failure
-// Note: This is hard to test as SetWriteSingleRegisterData should not fail for valid inputs
-// But we can test with edge cases
+// WriteSingleRegister with max address (valid inputs; SetWriteSingleRegisterData doesn't fail)
 TEST(TCPMasterCoverage, WriteSingleRegister_EdgeCases) {
   static constexpr uint8_t kUnitId{1};
   MemoryTransport transport;
@@ -1202,8 +1195,7 @@ TEST(TCPMasterCoverage, ReadFrame_MultipleZeroReads) {
   transport.SetReadData(frame);
   transport.ResetReadPosition();
 
-  // This will require many reads (1 byte at a time)
-  auto result = master.ReceiveResponse(1, 2000);  // Longer timeout for many reads
+  auto result = master.ReceiveResponse(1, 2000);  // PartialReadTransport yields 1 byte per read
   ASSERT_TRUE(result.has_value());
   EXPECT_EQ(result->GetUnitId(), kUnitId);
 }

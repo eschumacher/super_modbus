@@ -12,7 +12,7 @@
  *   ./testable_slave /dev/ttyUSB0 9600 1
  *
  * To use with real hardware, implement a ByteTransport for your serial port.
- * See example_serial_transport.cpp for a template.
+ * See serial_transport.hpp for a POSIX implementation.
  */
 
 #include <iostream>
@@ -62,10 +62,8 @@ int main(int argc, const char *argv[]) {
   std::signal(SIGINT, signal_handler);
   std::signal(SIGTERM, signal_handler);
 
-  // Create transport
-  // TODO: Replace with your serial port transport implementation
-  // MySerialTransport transport(port, baud_rate);
-  MemoryTransport transport;  // Placeholder - replace with real serial transport
+  // Use SerialTransport (see examples/serial_transport.hpp) for real hardware
+  MemoryTransport transport;
 
   // Create slave
   RtuSlave slave(slave_id);

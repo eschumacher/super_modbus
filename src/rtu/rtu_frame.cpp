@@ -153,9 +153,7 @@ std::optional<RtuResponse> RtuFrame::DecodeResponse(std::span<const uint8_t> fra
   RtuResponse response(slave_id, function_code);
 
   if (is_exception) {
-    // Exception response: next byte is exception code
-    // Note: frame.size() >= kMinFrameSize (4) already checked above, so >= 3 is always true
-    // But we keep the check for clarity and defensive programming
+    // Exception response: next byte is exception code (size already >= kMinFrameSize)
     if (frame.size() >= 3) {  // NOLINT(cppcheck-suppress knownConditionTrueFalse)
       auto exception_code = static_cast<ExceptionCode>(frame[2]);
       response.SetExceptionCode(exception_code);
@@ -236,37 +234,6 @@ bool RtuFrame::IsResponseFrameComplete(std::span<const uint8_t> frame) {
   // For other function codes, use the minimum frame size
   size_t min_size = GetMinFrameSize(function_code);
   return frame.size() >= min_size;
-}
-
-bool RtuFrame::IsFrameComplete(std::span<const uint8_t> frame) {
-  // Legacy function - try to determine if it's a request or response
-  // This is less reliable, prefer using IsRequestFrameComplete or IsResponseFrameComplete
-  if (frame.size() < 2) {
-    return false;
-  }
-
-  uint8_t function_code_byte = frame[1];
-  bool is_exception = (function_code_byte & kExceptionFunctionCodeMask) != 0;
-
-  // Exception responses are always responses
-  if (is_exception) {
-    return IsResponseFrameComplete(frame);
-  }
-
-  // For read operations, try to determine by frame size
-  auto function_code = static_cast<FunctionCode>(function_code_byte & kFunctionCodeMask);
-  if (function_code == FunctionCode::kReadHR || function_code == FunctionCode::kReadIR ||
-      function_code == FunctionCode::kReadCoils || function_code == FunctionCode::kReadDI) {
-    // Request is always kWriteSingleFrameSize bytes, response is variable
-    if (frame.size() == kWriteSingleFrameSize) {
-      return IsRequestFrameComplete(frame);
-    }
-    // Otherwise, assume it's a response
-    return IsResponseFrameComplete(frame);
-  }
-
-  // For other function codes, check as request first (most common case)
-  return IsRequestFrameComplete(frame);
 }
 
 }  // namespace supermb

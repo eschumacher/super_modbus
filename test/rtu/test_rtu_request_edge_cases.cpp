@@ -140,12 +140,7 @@ TEST(RtuRequestEdgeCases, SetAddressSpanAllValidFunctionCodes) {
   }
 }
 
-// Note: SetAddressSpanInvalidFunctionCode test removed because
-// SetAddressSpan asserts when called with invalid function code.
-// This is intentional library behavior - invalid function codes should
-// not be used with SetAddressSpan. Testing this would require
-// disabling assertions or using a death test, which is not necessary
-// for coverage purposes.
+// SetAddressSpan asserts on invalid function code; no death test here (see TCP request edge tests).
 
 TEST(RtuRequestEdgeCases, SetWriteSingleRegisterData) {
   RtuRequest request{{1, FunctionCode::kWriteSingleReg}};

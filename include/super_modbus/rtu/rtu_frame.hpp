@@ -71,14 +71,6 @@ class RtuFrame {
    */
   [[nodiscard]] static bool IsResponseFrameComplete(std::span<const uint8_t> frame);
 
-  /**
-   * @brief Check if a frame appears complete (has minimum size)
-   * @deprecated Use IsRequestFrameComplete or IsResponseFrameComplete instead
-   * @param frame Partial or complete frame
-   * @return true if frame has minimum size, false otherwise
-   */
-  [[nodiscard]] static bool IsFrameComplete(std::span<const uint8_t> frame);
-
  private:
   static constexpr size_t kMinFrameSize = 4;  // slave_id + function_code + CRC (2 bytes)
   static constexpr size_t kCrcSize = 2;

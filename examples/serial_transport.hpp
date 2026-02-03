@@ -290,7 +290,7 @@ class SerialTransport : public ByteTransport {
 
     return true;
 #else
-    // Non-Linux platforms would need platform-specific implementation
+    // Other platforms need their own serial impl (e.g. termios on macOS, Win32 APIs)
     (void)port_name_;
     (void)baud_rate_;
     (void)parity_;

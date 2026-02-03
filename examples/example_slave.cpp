@@ -14,8 +14,7 @@
 #include "super_modbus/rtu/rtu_slave.hpp"
 #include "super_modbus/transport/memory_transport.hpp"
 
-// In a real application, you would implement your own transport:
-// class SerialTransport : public supermb::ByteTransport { ... };
+// For real hardware, use a ByteTransport (e.g. SerialTransport from examples).
 
 int main() {
   using supermb::AddressSpan;
@@ -49,32 +48,14 @@ int main() {
   slave.SetFIFOQueue(0, fifo_data);
   std::cout << "  Set up FIFO queue at address 0 with " << fifo_data.size() << " entries\n";
 
-  // Create transport (in production, use your serial port transport)
-  [[maybe_unused]] MemoryTransport transport;  // Used in real app: slave.Poll(transport) in a loop
+  [[maybe_unused]] MemoryTransport transport;
 
   std::cout << "\nSlave ready! Waiting for Modbus requests...\n";
-  std::cout << "In a real application, this would poll the transport continuously.\n\n";
+  std::cout << "With real hardware, run slave.Poll(transport) in a loop.\n\n";
 
-  // Example: Process incoming frames
-  // In a real application, you would do this in a loop:
-  //
-  // while (running) {
-  //   if (slave.Poll(transport)) {
-  //     // Frame processed
-  //   }
-  //   std::this_thread::sleep_for(std::chrono::milliseconds(10));
-  // }
-
-  // For demonstration, show how to process a frame manually
   std::cout << "Example: Processing a read holding registers request...\n";
-
-  // In a real application, frames would come from the transport.
-  // Here we demonstrate the Process() method directly:
-
-  // Create a sample request (normally decoded from transport)
-  // This is just for demonstration - in real use, frames come from transport
-  std::cout << "\nNote: In real use, frames are automatically decoded from transport.\n";
-  std::cout << "The slave.ProcessIncomingFrame() or slave.Poll() methods handle this.\n";
+  // Normally frames come from transport; here we show Process() directly.
+  std::cout << "\nIn production, use slave.Poll(transport) or ProcessIncomingFrame().\n";
 
   std::cout << "\nSlave configuration complete!\n";
   std::cout << "To use with real hardware:\n";

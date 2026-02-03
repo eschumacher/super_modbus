@@ -10,6 +10,9 @@ A modern C++ Modbus library designed for easy integration into any project. The 
 - **Transport Abstraction**: Works with any byte I/O mechanism (serial, TCP, memory, etc.) through a simple interface
 - **Modbus RTU Support**: Full RTU frame encoding/decoding with CRC-16 verification
 - **Modbus TCP Support**: Full TCP frame encoding/decoding with MBAP header support
+- **Modbus ASCII Support**: ASCII hex framing with LRC (same PDU as RTU)
+- **Modbus UDP**: Same MBAP format as TCP; use `TcpMaster`/`TcpSlave` with `UdpClientTransport` (see `examples/udp_transport.hpp`)
+- **RTU over TCP**: Use `RtuMaster`/`RtuSlave` with a TCP `ByteTransport` (e.g. `TcpConnectionTransport`)
 - **Master/Client Functionality**: Read and write registers from Modbus devices
 - **Slave/Server Functionality**: Process Modbus requests and respond
 - **Modern C++20**: Uses modern C++ features for type safety and performance
@@ -25,13 +28,13 @@ The library is designed with a clear separation of concerns:
 ```
 ┌─────────────────────────────────────┐
 │   Application Layer                  │
-│   (RtuMaster, RtuSlave,             │
-│    TcpMaster, TcpSlave)             │
+│   (RtuMaster, RtuSlave, AsciiMaster,│
+│    AsciiSlave, TcpMaster, TcpSlave) │
 └──────────────┬──────────────────────┘
                │
 ┌──────────────▼──────────────────────┐
 │   Protocol Layer                    │
-│   (RtuFrame, TcpFrame, CRC-16)      │
+│   (RtuFrame, AsciiFrame, TcpFrame)  │
 └──────────────┬──────────────────────┘
                │
 ┌──────────────▼──────────────────────┐
@@ -260,6 +263,17 @@ make example_loopback         # Loopback example
 make run_tests                # Test suite
 ```
 
+### Installation
+
+```bash
+cd build
+cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local
+make
+sudo make install
+```
+
+Headers are installed to `include/super_modbus/`, the library to `lib/`. Use `find_package` or link against `super-modbus::super-modbus-lib` when using the installed package.
+
 ### Running Tests
 
 ```bash
@@ -285,7 +299,7 @@ make
 See the `examples/` directory for complete example code demonstrating:
 - Master/client usage (RTU)
 - Slave/server usage (RTU)
-- Serial port transport implementation template
+- Serial port transport (serial_transport.hpp, POSIX)
 - Complete master-slave loopback demonstration
 - Testable slave for use with Modbus Poll (RTU)
 - **Testable TCP slave** (`testable_tcp_slave`) for use with mbpoll or other Modbus TCP masters
@@ -426,14 +440,12 @@ mbpoll -m tcp -a 1 -0 -r 0 127.0.0.1 1234
 mbpoll -m tcp -a 1 -0 -r 0 -c 10 -1 -p 5502 127.0.0.1
 ```
 
-The comprehensive automated scripts below are **RTU-only**; there is no `test_with_mbpoll_tcp.sh` yet.
-
 ### Testing with Modbus Poll (Windows)
 
 To test with Modbus Poll or similar Windows software:
 
 1. **Build the library and examples** (see Building section)
-2. **Implement serial transport** (see `examples/example_serial_transport.cpp`)
+2. **Implement serial transport** (see `examples/serial_transport.hpp` for a POSIX reference)
 3. **Set up virtual ports** (use com0com on Windows or bridge WSL2 ports)
 4. **Run testable slave**: `./testable_slave <port> <baud> <slave_id>`
 5. **Connect Modbus Poll** to the serial port with matching settings:
@@ -456,7 +468,10 @@ The repository includes automated **RTU** test scripts (virtual serial ports via
 ./scripts/test_master_comprehensive.sh
 ```
 
-Use `./build/testable_tcp_slave [bind] [port] [unit_id]` for a runnable TCP slave, then test with mbpoll (see "Testing with mbpoll (TCP)" above). There is no automated `test_with_mbpoll_tcp.sh` script yet.
+**Automated scripts:**
+- RTU E2E: `./scripts/test_with_mbpoll_comprehensive.sh`
+- TCP E2E: `./scripts/test_with_mbpoll_tcp.sh` (uses testable_tcp_slave)
+- Master tests: `./scripts/test_master_comprehensive.sh`
 
 ### Run CI locally
 

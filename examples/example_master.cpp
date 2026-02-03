@@ -13,8 +13,7 @@
 #include "super_modbus/rtu/rtu_master.hpp"
 #include "super_modbus/transport/memory_transport.hpp"
 
-// In a real application, you would implement your own transport:
-// class SerialTransport : public supermb::ByteTransport { ... };
+// For real hardware, use a ByteTransport (e.g. SerialTransport from examples).
 
 int main() {
   using supermb::MemoryTransport;

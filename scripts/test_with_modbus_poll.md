@@ -46,7 +46,7 @@ socat -d -d pty,raw,echo=0 pty,raw,echo=0
 
 ## Step 3: Implement Serial Transport
 
-You need to implement `ByteTransport` for your serial port. See `examples/example_serial_transport.cpp` for a template.
+You need to implement `ByteTransport` for your serial port. See `examples/serial_transport.hpp` for a POSIX reference implementation.
 
 Quick example using POSIX (Linux):
 

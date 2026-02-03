@@ -30,21 +30,18 @@ TEST(TCPRequestEdgeCases, SetAddressSpanInvalidFunction) {
   TcpRequest request{{0, 1, FunctionCode::kReadExceptionStatus}};
   AddressSpan span{0, 10};
 
-  // This should assert in debug builds
   EXPECT_DEATH(request.SetAddressSpan(span), ".*");
 }
 
 TEST(TCPRequestEdgeCases, SetWriteSingleRegisterDataInvalidFunction) {
   TcpRequest request{{0, 1, FunctionCode::kReadHR}};
 
-  // This should assert in debug builds
   EXPECT_DEATH(request.SetWriteSingleRegisterData(0, 100), ".*");
 }
 
 TEST(TCPRequestEdgeCases, SetWriteSingleCoilDataInvalidFunction) {
   TcpRequest request{{0, 1, FunctionCode::kReadHR}};
 
-  // This should assert in debug builds
   EXPECT_DEATH(request.SetWriteSingleCoilData(0, true), ".*");
 }
 
@@ -52,7 +49,6 @@ TEST(TCPRequestEdgeCases, SetWriteMultipleRegistersDataInvalidFunction) {
   TcpRequest request{{0, 1, FunctionCode::kReadHR}};
   std::vector<int16_t> values{100, 200};
 
-  // This should assert in debug builds
   EXPECT_DEATH(request.SetWriteMultipleRegistersData(0, 2, values), ".*");
 }
 
@@ -69,7 +65,6 @@ TEST(TCPRequestEdgeCases, SetWriteMultipleCoilsDataInvalidFunction) {
   TcpRequest request{{0, 1, FunctionCode::kReadHR}};
   std::array<bool, 2> values{true, false};
 
-  // This should assert in debug builds
   EXPECT_DEATH(request.SetWriteMultipleCoilsData(0, 2, values), ".*");
 }
 
@@ -86,7 +81,6 @@ TEST(TCPRequestEdgeCases, SetDiagnosticsDataInvalidFunction) {
   TcpRequest request{{0, 1, FunctionCode::kReadHR}};
   std::vector<uint8_t> data{0x12, 0x34};
 
-  // This should assert in debug builds
   EXPECT_DEATH(request.SetDiagnosticsData(0x0001, data), ".*");
 }
 
@@ -103,7 +97,6 @@ TEST(TCPRequestEdgeCases, SetDiagnosticsData_DataSizeOverflow) {
 TEST(TCPRequestEdgeCases, SetMaskWriteRegisterDataInvalidFunction) {
   TcpRequest request{{0, 1, FunctionCode::kReadHR}};
 
-  // This should assert in debug builds
   EXPECT_DEATH(request.SetMaskWriteRegisterData(0, 0xFF00, 0x00FF), ".*");
 }
 
@@ -111,7 +104,6 @@ TEST(TCPRequestEdgeCases, SetReadWriteMultipleRegistersDataInvalidFunction) {
   TcpRequest request{{0, 1, FunctionCode::kReadHR}};
   std::vector<int16_t> write_values{100, 200};
 
-  // This should assert in debug builds
   EXPECT_DEATH(request.SetReadWriteMultipleRegistersData(0, 3, 10, 2, write_values), ".*");
 }
 
@@ -127,7 +119,6 @@ TEST(TCPRequestEdgeCases, SetReadWriteMultipleRegistersDataCountMismatch) {
 TEST(TCPRequestEdgeCases, SetReadFIFOQueueDataInvalidFunction) {
   TcpRequest request{{0, 1, FunctionCode::kReadHR}};
 
-  // This should assert in debug builds
   EXPECT_DEATH(request.SetReadFIFOQueueData(0x1234), ".*");
 }
 
@@ -135,7 +126,6 @@ TEST(TCPRequestEdgeCases, SetReadFileRecordDataInvalidFunction) {
   TcpRequest request{{0, 1, FunctionCode::kReadHR}};
   std::vector<std::tuple<uint16_t, uint16_t, uint16_t>> file_records{{1, 0, 5}};
 
-  // This should assert in debug builds
   EXPECT_DEATH(request.SetReadFileRecordData(file_records), ".*");
 }
 

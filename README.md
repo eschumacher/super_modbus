@@ -19,7 +19,7 @@ A modern C++ Modbus library designed for easy integration into any project. The 
 - **Header-Only Components**: Many utilities are header-only for easy integration
 - **Configurable wire format**: Byte order (big-endian default, little-endian for Enron-style) and word order for 32-bit values; optional float count semantics
 - **32-bit float support**: Master `ReadFloats`/`WriteFloats` and slave `AddFloatRange`/`SetFloat` for two-register floats with configurable byte/word order
-- **Comprehensive Test Suite**: 630+ tests covering all function codes and edge cases for both RTU and TCP
+- **Comprehensive Test Suite**: 718+ tests covering all function codes and edge cases for RTU, TCP, and ASCII
 
 ## Architecture
 
@@ -223,7 +223,7 @@ All standard Modbus function codes are implemented in both RTU and TCP variants 
 - **FC 23**: Read/Write Multiple Registers
 - **FC 24**: Read FIFO Queue
 
-All function codes are fully tested with comprehensive test coverage for both RTU and TCP implementations.
+All function codes are fully tested with comprehensive test coverage for RTU, TCP, and ASCII implementations.
 
 ## Building
 
@@ -310,8 +310,8 @@ Note: TCP follows the same patterns as RTU; use `TcpMaster`/`TcpSlave` with a so
 
 ### Unit Tests
 
-The library includes a comprehensive test suite with 630+ tests covering:
-- All function codes (FC 1-24) for both RTU and TCP
+The library includes a comprehensive test suite with 718+ tests covering:
+- All function codes (FC 1-24) for RTU, TCP, and ASCII
 - Error handling and exception responses
 - Edge cases and boundary conditions
 - Integration tests for master-slave communication
